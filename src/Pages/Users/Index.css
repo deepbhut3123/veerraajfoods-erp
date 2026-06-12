@@ -1,0 +1,7 @@
+.user-row:hover > td {
+  background: #f0fffd !important;
+}
+
+.user-row td {
+  transition: background-color 0.2s ease;
+}

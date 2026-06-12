@@ -1,0 +1,7 @@
+.product-row:hover > td {
+  background: #f0fffd !important;
+}
+
+.product-row td {
+  transition: background-color 0.2s ease;
+}

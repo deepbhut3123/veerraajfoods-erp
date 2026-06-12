@@ -1,0 +1,138 @@
+/* header - style */
+
+.header {
+    position: sticky;
+    padding: 0%;
+    top: 0%;
+    background-color: #ffffff;
+    z-index: 99;
+    height: 50px;
+}
+
+.header-container {
+    display: flex;
+    transition: width 0.3s ease;
+    justify-content: space-between;
+    padding: 0px 16px;
+    margin: 0px 0px;
+}
+
+.header-title {
+    font-size: 24px;
+    color: #7f7f7f;
+}
+
+.header-icon {
+    font-size: 30px;
+    color: #7f7f7f;
+}
+
+.header-crossicon {
+    font-size: 30px;
+    margin-right: 850px;
+    color: #7f7f7f;
+}
+
+/* sidebar - style */
+
+.desktop-screen-sidebar {
+    position: sticky !important;
+    height: 100vh !important;
+    overflow-y: auto !important;
+    top: 0% !important;
+    left: 0% !important;
+    bottom: 0% !important;
+}
+
+.mobile-screen-sidebar {
+    background-color: #0080ff !important;
+    position: fixed !important;
+    height: 100vh !important;
+    overflow-y: auto !important;
+    top: 0% !important;
+    left: 0% !important;
+    bottom: 0% !important;
+    z-index: 1000 !important;
+}
+
+.sidebar-menu {
+    font-family: 'Open Sans';
+    border: #111111;
+    border-radius: 10px ;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 22px;
+    letter-spacing: 0em;
+    text-align: left;
+    opacity: 0.7;
+    color: #FFFFFF !important;
+    overflow-y: auto;
+    height: calc(100vh - 70px);
+}
+
+.sidebar-menu-active {
+    font-family: 'Open Sans';
+    font-size: 16px;
+    line-height: 22px;
+    letter-spacing: 0em;
+    text-align: left;
+    color: #FFFFFF !important;
+    background-color: transparent !important;
+}
+
+.ant-layout-sider-trigger {
+    background-color: #0080ff !important;
+    /* Set to your sidebar background color */
+    border-top: 1px solid #0080ff !important;
+    /* Optional border styling to match your sidebar */
+    color: #fff;
+    /* Set the text color to white or the desired color */
+}
+
+::-webkit-scrollbar {
+    width: 0;
+}
+
+.ant-drawer-body {
+    background-color: #001529;
+}
+
+/* Create a new CSS file or add to your existing one */
+/* Add these styles to achieve a similar look to the example */
+
+/* Sidebar styles */
+.desktop-screen-sidebar {
+    background-color: #111; /* Background color for the sidebar */
+    color: #818181; /* Text color */
+  }
+  
+  .sidebar-menu,
+  .sidebar-menu-active {
+    transition: background-color 0.3s, color 0.3s;
+  }
+  
+  /* Hover effect */
+  .sidebar-menu:hover,
+  .sidebar-menu-active:hover {
+    background-color: #333; /* Hover background color */
+  }
+  
+  /* Logo styles */
+  .sidebar-logo {
+    max-height: 50px; /* Adjust the logo height */
+  }
+  
+  /* Submenu item styles */
+  .ant-menu-submenu-title {
+     color: #818181; /*Submenu text color */
+  }
+  
+  .ant-menu-submenu-title:hover {
+    color: #fff; /* Submenu hover text color */
+  }
+  
+  .sidebar-menu-active {
+    background-color: #1890ff; /* Set the background color for the active menu item */
+    color: #fff; /* Set the text color for the active menu item */
+  }
+  
