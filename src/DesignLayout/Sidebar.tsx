@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Drawer, Layout, Menu } from "antd";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
@@ -13,6 +13,45 @@ import {
 import "../MasterLayout/Master.css";
 
 const { Sider } = Layout;
+
+const MENU_ITEMS = [
+  {
+    key: "dashboard",
+    icon: <DashboardOutlined style={{ color: "inherit" }} />,
+    text: "Dashboard",
+    link: "/dashboard",
+  },
+  {
+    key: "routes",
+    icon: <SnippetsOutlined style={{ color: "inherit" }} />,
+    text: "Routes",
+    link: "/routes",
+  },
+  {
+    key: "shops",
+    icon: <ShopOutlined style={{ color: "inherit" }} />,
+    text: "Shops",
+    link: "/shops",
+  },
+  {
+    key: "bills",
+    icon: <FileTextOutlined style={{ color: "inherit" }} />,
+    text: "Bills",
+    link: "/bills",
+  },
+  {
+    key: "products",
+    icon: <DatabaseOutlined style={{ color: "inherit" }} />,
+    text: "Products",
+    link: "/products",
+  },
+  {
+    key: "users",
+    icon: <UserOutlined style={{ color: "inherit" }} />,
+    text: "Users",
+    link: "/users",
+  },
+];
 
 interface SidebarProps {
   collapsed: boolean;
@@ -44,53 +83,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [activeMenuItemKey, setActiveMenuItemKey] = useState<string | null>(
     null
   );
-  const [hoverEffectActive, setHoverEffectActive] = useState(true);
-  const [openKeys, setOpenKeys] = useState<string[]>([]);
+  const [, setHoverEffectActive] = useState(true);
+  const [, setOpenKeys] = useState<string[]>([]);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
   const siderRef = useRef<HTMLDivElement>(null);
   //   const { authData } = useContext(AuthContext);
 
-  const menuItems = [
-    {
-      key: "dashboard",
-      icon: <DashboardOutlined style={{ color: "inherit" }} />,
-      text: "Dashboard",
-      link: "/dashboard",
-    },
-    {
-      key: "routes",
-      icon: <SnippetsOutlined style={{ color: "inherit" }} />,
-      text: "Routes",
-      link: "/routes",
-    },
-    {
-      key: "shops",
-      icon: <ShopOutlined style={{ color: "inherit" }} />,
-      text: "Shops",
-      link: "/shops",
-    },
-    {
-      key: "bills",
-      icon: <FileTextOutlined style={{ color: "inherit" }} />,
-      text: "Bills",
-      link: "/bills",
-    },
-    {
-      key: "products",
-      icon: <DatabaseOutlined style={{ color: "inherit" }} />,
-      text: "Products",
-      link: "/products",
-    },
-    {
-      key: "users",
-      icon: <UserOutlined style={{ color: "inherit" }} />,
-      text: "Users",
-      link: "/users",
-    },
-  ];
-
   useEffect(() => {
-    const currentItem = menuItems.find(
+    const currentItem = MENU_ITEMS.find(
       (item) =>
         location.pathname === item.link ||
         (item.link && location.pathname.startsWith(item.link + "/"))
@@ -143,7 +143,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleMenuItemClick = (key: string) => {
-    const item = menuItems.find((item) => item.key === key);
+    const item = MENU_ITEMS.find((item) => item.key === key);
     if (item) {
       setActiveMenuItemKey(item.key);
       navigate(item.link);
@@ -188,7 +188,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             selectedKeys={[activeMenuItemKey || ""]}
             style={{ color: "white", width: "100%" }}
           >
-            {menuItems.map((item) => (
+            {MENU_ITEMS.map((item) => (
               <Menu.Item
                 key={item.key}
                 icon={<span style={{ fontSize: "24px" }}>{item.icon}</span>}
@@ -250,7 +250,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               backgroundColor: "transparent", // let gradient show
               borderRight: "none",
             }}
-            items={menuItems.map((item) => ({
+            items={MENU_ITEMS.map((item) => ({
               key: item.key,
               icon: (
                 <span

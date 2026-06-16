@@ -1,23 +1,6 @@
-import React, { useEffect, useState } from "react";
-import {
-  MenuOutlined,
-  UserOutlined,
-  LogoutOutlined,
-  BellOutlined,
-} from "@ant-design/icons";
-import {
-  Button,
-  Layout,
-  Row,
-  Col,
-  Avatar,
-  Dropdown,
-  Menu,
-  Badge,
-  Divider,
-  Modal,
-} from "antd";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { MenuOutlined, UserOutlined, LogoutOutlined } from "@ant-design/icons";
+import { Button, Layout, Row, Col, Avatar, Dropdown, Menu, Modal } from "antd";
 // import { getNofications, updateNotification } from "../utils/API"; // ✅ Add your updateNotification API
 
 const { Header } = Layout;
@@ -29,14 +12,10 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ toggleSidebar }) => {
-  const [taskLogs, setTaskLogs] = useState<any[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedNotification, setSelectedNotification] = useState<any>(null);
-
-  const navigate = useNavigate();
+  const [selectedNotification] = useState<any>(null);
 
   const storedUser = JSON.parse(localStorage.getItem("authData") || "{}");
-  const userId = storedUser?.user?._id || "";
 
   const handleLogout = () => {
     localStorage.clear();
@@ -107,36 +86,6 @@ const Navbar: React.FC<NavbarProps> = ({ toggleSidebar }) => {
       </Menu.Item>
     </Menu>
   );
-
-  const notificationMenu = (
-    <div onClick={(e) => e.stopPropagation()}>
-      <Menu
-        style={{ borderRadius: "8px", maxHeight: "300px", overflowY: "auto" }}
-      >
-        {taskLogs.length > 0 ? (
-          taskLogs.map((log, index) => (
-            <Menu.Item
-              key={`log-${index}`}
-              style={{
-                whiteSpace: "normal",
-                fontWeight: log.isRead ? "normal" : "bold",
-              }}
-              onClick={(e) => {
-                e.domEvent.stopPropagation();
-                // handleNotificationClick(log);
-              }}
-            >
-              {log.message || "No message"}
-            </Menu.Item>
-          ))
-        ) : (
-          <Menu.Item disabled>No logs available</Menu.Item>
-        )}
-      </Menu>
-    </div>
-  );
-
-  const unreadCount = taskLogs.filter((log) => !log.isRead).length;
 
   return (
     <>
