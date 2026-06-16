@@ -876,6 +876,12 @@ element.style {
   font-weight: 600;
   border-radius: 6px;
 }
+
+.ant-menu-item-selected:hover,
+.ant-menu-item-selected.ant-menu-item-active {
+  background-color: #26a69a !important;
+  color: white !important;
+}
 .compact-table .ant-table-cell {
   padding: 4px 8px !important; /* 🔹 smaller padding */
 }
@@ -892,4 +898,3 @@ element.style {
 .ant-picker-header-super-next-btn {
   display: none !important;
 }
-

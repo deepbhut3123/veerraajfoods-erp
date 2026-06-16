@@ -64,9 +64,13 @@ export const loginuser = async (data: {
   }
 };
 
-export const getAdminDashboardSummary = async () => {
+export const getAdminDashboardSummary = async (params?: {
+  month?: number;
+  year?: number;
+  userId?: string;
+}) => {
   try {
-    const response = await API.get("/admin/dashboard/summary");
+    const response = await API.get("/admin/dashboard/summary", { params });
     return response.data;
   } catch (error) {
     throw error;
@@ -85,6 +89,24 @@ export const getAllAdminRoutes = async () => {
 export const getAllAdminShops = async () => {
   try {
     const response = await API.get("/admin/shops");
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllAdminBills = async () => {
+  try {
+    const response = await API.get("/admin/bills/all");
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const markAdminBillsAsShipped = async (billIds: string[]) => {
+  try {
+    const response = await API.patch("/admin/bills/ship", { billIds });
     return response.data;
   } catch (error) {
     throw error;

@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   DashboardOutlined,
   DatabaseOutlined,
+  FileTextOutlined,
   ShopOutlined,
   SnippetsOutlined,
   UserOutlined,
@@ -33,6 +34,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   disableHover,
   onItemClick,
 }) => {
+  const ACTIVE_LIGHT_COLOR = "#E0F7F6";
+  const DEFAULT_ICON_COLOR = "#00695C";
+  const DEFAULT_TEXT_COLOR = "#004D40";
   const Logo_Main = require("../Assets/VEERRAJLOGOR.jpg");
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,6 +70,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       link: "/shops",
     },
     {
+      key: "bills",
+      icon: <FileTextOutlined style={{ color: "inherit" }} />,
+      text: "Bills",
+      link: "/bills",
+    },
+    {
       key: "products",
       icon: <DatabaseOutlined style={{ color: "inherit" }} />,
       text: "Products",
@@ -97,6 +107,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       "/dashboard": "Dashboard",
       "/routes": "Routes",
       "/shops": "Shops",
+      "/bills": "Bills",
       "/products": "Products",
       "/users": "Users",
     };
@@ -242,7 +253,15 @@ const Sidebar: React.FC<SidebarProps> = ({
             items={menuItems.map((item) => ({
               key: item.key,
               icon: (
-                <span style={{ fontSize: "20px", color: "#00695C" }}>
+                <span
+                  style={{
+                    fontSize: "20px",
+                    color:
+                      activeMenuItemKey === item.key
+                        ? ACTIVE_LIGHT_COLOR
+                        : DEFAULT_ICON_COLOR,
+                  }}
+                >
                   {item.icon}
                 </span>
               ),
@@ -251,7 +270,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                   to={item.link}
                   style={{
                     textDecoration: "none",
-                    color: "#004D40", // default font
+                    color:
+                      activeMenuItemKey === item.key
+                        ? ACTIVE_LIGHT_COLOR
+                        : DEFAULT_TEXT_COLOR,
                     fontWeight: 500,
                   }}
                 >

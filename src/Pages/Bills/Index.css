@@ -1,0 +1,16 @@
+.bill-row:hover > td {
+  background: #f0fffd !important;
+}
+
+.bill-row td {
+  transition: background-color 0.2s ease;
+}
+
+.bill-row-clickable td {
+  cursor: pointer;
+}
+
+.bill-row-clickable .ant-table-selection-column,
+.bill-row-clickable .ant-table-selection-column * {
+  cursor: default;
+}

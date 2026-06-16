@@ -3,7 +3,7 @@ import { Alert, Card, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { getAllAdminShops } from "../../Utils/Api";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 type AdminShop = {
   _id: string;
@@ -59,7 +59,6 @@ const ShopsPage: React.FC = () => {
         <Title level={3} style={{ marginBottom: 4 }}>
           Shops
         </Title>
-        <Text type="secondary">Admin view of all shops in the system.</Text>
 
         {error ? (
           <div style={{ marginTop: 16 }}>

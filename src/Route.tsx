@@ -1,4 +1,5 @@
 import Dashboard from "./DesignLayout/Dashboard";
+import BillsPage from "./Pages/Bills/Index";
 import RoutesPage from "./Pages/Routes/Index";
 import ShopsPage from "./Pages/Shops/Index";
 import ProductsPage from "./Pages/Products/Index";
@@ -19,6 +20,11 @@ const AdminRoutes = [
     path: "/shops",
     name: "Shops",
     component: ShopsPage,
+  },
+  {
+    path: "/bills",
+    name: "Bills",
+    component: BillsPage,
   },
   {
     path: "/products",

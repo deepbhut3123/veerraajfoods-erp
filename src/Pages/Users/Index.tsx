@@ -351,9 +351,6 @@ const UsersPage: React.FC = () => {
             <Title level={3} style={{ marginBottom: 4, color: THEME.dark }}>
               Users
             </Title>
-            <Text style={{ color: "#64748b" }}>
-              Admin can register, update, activate and delete users from here.
-            </Text>
           </div>
           <Button
             onClick={openCreate}

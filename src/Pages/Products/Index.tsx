@@ -242,9 +242,6 @@ const ProductsPage: React.FC = () => {
             <Title level={3} style={{ marginBottom: 4, color: THEME.dark }}>
               Products
             </Title>
-            <Text style={{ color: "#64748b" }}>
-              Admin CRUD for product name, MRP and product rate.
-            </Text>
           </div>
           <Button
             onClick={openCreate}
