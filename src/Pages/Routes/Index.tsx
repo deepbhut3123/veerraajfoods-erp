@@ -1,10 +1,39 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Modal, Space, Table, Tag, Typography } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+  message,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { EnvironmentOutlined } from "@ant-design/icons";
-import { getAllAdminRoutes, getAllAdminShops } from "../../Utils/Api";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  EnvironmentOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
+import {
+  addAdminRoute,
+  deleteAdminRoute,
+  getAllAdminRoutes,
+  getAllAdminShops,
+  updateAdminRoute,
+} from "../../Utils/Api";
 
 const { Title, Text } = Typography;
+const THEME = {
+  dark: "#004D40",
+  mid: "#00695C",
+};
 
 type AdminRoute = {
   _id: string;
@@ -45,6 +74,11 @@ type AdminShop = {
 type ShopCoordinate = {
   latitude: number;
   longitude: number;
+};
+
+type RouteFormValues = {
+  routeName: string;
+  cityName: string;
 };
 
 const getCoordinateValue = (value?: number | string) => {
@@ -91,46 +125,133 @@ const getShopCoordinates = (shop: AdminShop): ShopCoordinate | null => {
 const getGoogleMapsLink = (coordinates: ShopCoordinate) =>
   `https://www.google.com/maps?q=${coordinates.latitude},${coordinates.longitude}`;
 
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+const buildGoogleMapsMultiStopUrl = (locations: ShopCoordinate[]) => {
+  if (!locations.length) {
+    return "";
+  }
+
+  if (locations.length === 1) {
+    return getGoogleMapsLink(locations[0]);
+  }
+
+  const toPoint = (location: ShopCoordinate) =>
+    `${location.latitude},${location.longitude}`;
+
+  const origin = toPoint(locations[0]);
+  const destination = toPoint(locations[locations.length - 1]);
+  const waypoints = locations
+    .slice(1, -1)
+    .map(toPoint)
+    .join("|");
+
+  const params = new URLSearchParams({
+    api: "1",
+    origin,
+    destination,
+    travelmode: "driving",
+  });
+
+  if (waypoints) {
+    params.set("waypoints", waypoints);
+  }
+
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+};
 
 const RoutesPage: React.FC = () => {
   const [data, setData] = useState<AdminRoute[]>([]);
   const [shops, setShops] = useState<AdminShop[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchText, setSearchText] = useState("");
   const [activeRoute, setActiveRoute] = useState<AdminRoute | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingItem, setEditingItem] = useState<AdminRoute | null>(null);
+  const [form] = Form.useForm<RouteFormValues>();
+
+  const loadRoutes = async (search = "") => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [routesRes, shopsRes] = await Promise.all([
+        getAllAdminRoutes({ search: search.trim() || undefined }),
+        getAllAdminShops(),
+      ]);
+      setData(routesRes?.data || []);
+      setShops(shopsRes?.data || []);
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message || err?.message || "Failed to load routes",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadRoutes = async () => {
-      setLoading(true);
-      setError("");
+    const timer = window.setTimeout(() => {
+      loadRoutes(searchText);
+    }, 350);
 
-      try {
-        const [routesRes, shopsRes] = await Promise.all([
-          getAllAdminRoutes(),
-          getAllAdminShops(),
-        ]);
-        setData(routesRes?.data || []);
-        setShops(shopsRes?.data || []);
-      } catch (err: any) {
-        setError(
-          err?.response?.data?.message ||
-            err?.message ||
-            "Failed to load routes",
-        );
-      } finally {
-        setLoading(false);
+    return () => window.clearTimeout(timer);
+  }, [searchText]);
+
+  const openCreate = () => {
+    setEditingItem(null);
+    form.resetFields();
+    setModalOpen(true);
+  };
+
+  const openEdit = (item: AdminRoute) => {
+    setEditingItem(item);
+    form.setFieldsValue({
+      routeName: item.routeName,
+      cityName: item.cityName,
+    });
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingItem(null);
+    form.resetFields();
+  };
+
+  const handleSubmit = async (values: RouteFormValues) => {
+    setSaving(true);
+    try {
+      if (editingItem) {
+        await updateAdminRoute(editingItem._id, values);
+        message.success("Route updated successfully");
+      } else {
+        await addAdminRoute(values);
+        message.success("Route created successfully");
       }
-    };
 
-    loadRoutes();
-  }, []);
+      closeModal();
+      await loadRoutes(searchText);
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to save route",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAdminRoute(id);
+      message.success("Route deleted successfully");
+      await loadRoutes(searchText);
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to delete route",
+      );
+    }
+  };
 
   const routeShops = useMemo(() => {
     if (!activeRoute) {
@@ -179,111 +300,57 @@ const RoutesPage: React.FC = () => {
     [routeShops],
   );
 
+  const filteredData = useMemo(() => {
+    const keyword = searchText.trim().toLowerCase();
+
+    if (!keyword) {
+      return data;
+    }
+
+    return data.filter((record) => {
+      const shopCount = shops.filter((shop) =>
+        shop.routeId?._id
+          ? shop.routeId._id === record._id
+          : shop.routeId?.routeName === record.routeName &&
+            shop.routeId?.cityName === record.cityName,
+      ).length;
+
+      return [
+        record.routeName,
+        record.cityName,
+        record.userId?.name,
+        record.userId?.email,
+        String(shopCount),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(keyword));
+    });
+  }, [data, searchText, shops]);
+
   const openAllShopsMap = () => {
     if (!routeShopLocations.length || !activeRoute) {
       return;
     }
 
-    const popup = window.open("", "_blank", "width=1100,height=800");
+    const mapsUrl = buildGoogleMapsMultiStopUrl(
+      routeShopLocations.map((location) => ({
+        latitude: location.latitude,
+        longitude: location.longitude,
+      })),
+    );
 
-    if (!popup) {
-      return;
+    if (mapsUrl) {
+      window.open(mapsUrl, "_blank", "noopener,noreferrer");
     }
-
-    const title = `${activeRoute.routeName}${activeRoute.cityName ? ` - ${activeRoute.cityName}` : ""} Shops Map`;
-    const locationsJson = JSON.stringify(routeShopLocations).replace(/</g, "\\u003c");
-
-    popup.document.write(`
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>${escapeHtml(title)}</title>
-          <link
-            rel="stylesheet"
-            href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-            integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-            crossorigin=""
-          />
-          <style>
-            body {
-              margin: 0;
-              font-family: "Segoe UI", Arial, sans-serif;
-              background: #f6fbfb;
-              color: #0f172a;
-            }
-            .header {
-              padding: 16px 20px;
-              border-bottom: 1px solid rgba(0, 105, 92, 0.14);
-              background: #ffffff;
-            }
-            .title {
-              margin: 0;
-              color: #004d40;
-              font-size: 22px;
-            }
-            .subtitle {
-              margin: 6px 0 0;
-              color: #475569;
-              font-size: 14px;
-            }
-            #map {
-              height: calc(100vh - 84px);
-              width: 100%;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1 class="title">${escapeHtml(title)}</h1>
-            <p class="subtitle">${routeShopLocations.length} shop location${routeShopLocations.length > 1 ? "s" : ""} marked on the map</p>
-          </div>
-          <div id="map"></div>
-          <script
-            src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-            crossorigin=""
-          ></script>
-          <script>
-            const locations = ${locationsJson};
-            const map = L.map("map");
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-              maxZoom: 19,
-              attribution: "&copy; OpenStreetMap contributors"
-            }).addTo(map);
-
-            const bounds = [];
-
-            locations.forEach((location) => {
-              const marker = L.marker([location.latitude, location.longitude]).addTo(map);
-              marker.bindPopup(
-                "<strong>" +
-                  location.name +
-                  "</strong><br />" +
-                  location.address +
-                  "<br />" +
-                  location.latitude +
-                  ", " +
-                  location.longitude,
-              );
-              bounds.push([location.latitude, location.longitude]);
-            });
-
-            if (bounds.length === 1) {
-              map.setView(bounds[0], 15);
-            } else {
-              map.fitBounds(bounds, { padding: [30, 30] });
-            }
-          </script>
-        </body>
-      </html>
-    `);
-
-    popup.document.close();
   };
 
   const columns: ColumnsType<AdminRoute> = [
+    {
+      title: "#",
+      key: "serial",
+      width: 72,
+      render: (_, __, index) => index + 1,
+    },
     {
       title: "Route Name",
       dataIndex: "routeName",
@@ -305,8 +372,8 @@ const RoutesPage: React.FC = () => {
         ),
     },
     {
-      title: "Locations",
-      key: "locations",
+      title: "Shops In",
+      key: "shopsIn",
       render: (_, record) => {
         const shopCount = shops.filter((shop) =>
           shop.routeId?._id
@@ -316,35 +383,148 @@ const RoutesPage: React.FC = () => {
         ).length;
 
         return (
+          <Tag
+            style={{
+              margin: 0,
+              border: "none",
+              background: "transparent",
+              color: "#0f172a",
+              fontSize: 15,
+              fontWeight: 600,
+              paddingInline: 0,
+            }}
+          >
+            {shopCount}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: "Locations",
+      key: "locations",
+      render: (_, record) => (
+        <Tooltip title="View shops">
           <Button
+            size="small"
             type="primary"
             icon={<EnvironmentOutlined />}
             onClick={() => setActiveRoute(record)}
             style={{
-              borderRadius: 10,
+              borderRadius: 8,
               background: "#00695C",
               borderColor: "#00695C",
+              width: 30,
+              height: 30,
+              padding: 0,
             }}
+            aria-label="View shops"
+          />
+        </Tooltip>
+      ),
+    },
+    {
+      title: "Actions",
+      key: "actions",
+      render: (_, record) => (
+        <Space size="small">
+          <Tooltip title="Edit route">
+            <Button
+              type="text"
+              aria-label="Edit route"
+              onClick={() => openEdit(record)}
+              icon={<EditOutlined />}
+              style={{
+                color: THEME.mid,
+                borderRadius: 10,
+                width: 36,
+                height: 36,
+              }}
+            />
+          </Tooltip>
+          <Popconfirm
+            title="Delete route"
+            description="Are you sure you want to delete this route?"
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleDelete(record._id)}
           >
-            View Shops ({shopCount})
-          </Button>
-        );
-      },
+            <Tooltip title="Delete route">
+              <Button
+                type="text"
+                aria-label="Delete route"
+                danger
+                icon={<DeleteOutlined />}
+                style={{
+                  borderRadius: 10,
+                  width: 36,
+                  height: 36,
+                }}
+              />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
+      ),
     },
   ];
 
   return (
-    <div style={{ padding: 20 }}>
+    <div
+      style={{
+        padding: 20,
+        background:
+          "linear-gradient(180deg, #f6fbfb 0%, #eef6f5 45%, #f8fafc 100%)",
+        minHeight: "calc(100vh - 50px)",
+      }}
+    >
       <Card
         bordered={false}
         style={{
           borderRadius: 18,
           boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
+          border: "1px solid rgba(0, 105, 92, 0.08)",
         }}
       >
-        <Title level={3} style={{ marginBottom: 4 }}>
-          Routes
-        </Title>
+        <Space
+          align="start"
+          style={{
+            width: "100%",
+            justifyContent: "space-between",
+            marginBottom: 12,
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <Title level={3} style={{ marginBottom: 4, color: THEME.dark }}>
+              Routes
+            </Title>
+          </div>
+          <Space size={12} wrap>
+            <Input.Search
+              allowClear
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search routes, city, creator, shops count"
+              style={{ width: 320 }}
+            />
+            <Button
+              onClick={openCreate}
+              icon={<PlusOutlined />}
+              style={{
+                height: 42,
+                paddingInline: 18,
+                borderRadius: 12,
+                border: "none",
+                color: "#fff",
+                fontWeight: 600,
+                background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+                boxShadow: "0 10px 20px rgba(0, 105, 92, 0.18)",
+              }}
+            >
+              Add Route
+            </Button>
+          </Space>
+        </Space>
 
         {error ? (
           <div style={{ marginTop: 16 }}>
@@ -355,8 +535,9 @@ const RoutesPage: React.FC = () => {
             style={{ marginTop: 20 }}
             rowKey="_id"
             loading={loading}
-            dataSource={data}
-            pagination={{ pageSize: 10 }}
+            dataSource={filteredData}
+            pagination={false}
+            scroll={{ x: "max-content", y: 520 }}
             columns={columns}
           />
         )}
@@ -455,6 +636,91 @@ const RoutesPage: React.FC = () => {
             );
           })}
         </Space>
+      </Modal>
+
+      <Modal
+        title={
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontWeight: 700, color: THEME.dark }}>
+              {editingItem ? "Edit Route" : "Add Route"}
+            </span>
+            <span style={{ color: "#64748b", fontSize: 13, fontWeight: 400 }}>
+              Enter the route name and city for this record
+            </span>
+          </div>
+        }
+        open={modalOpen}
+        onCancel={closeModal}
+        onOk={() => form.submit()}
+        okButtonProps={{
+          loading: saving,
+          style: {
+            background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+            borderColor: "#00695C",
+            borderRadius: 10,
+          },
+        }}
+        cancelButtonProps={{
+          style: {
+            borderRadius: 10,
+          },
+        }}
+        destroyOnClose
+        centered
+        width={640}
+        styles={{
+          header: {
+            borderBottom: "1px solid rgba(0, 105, 92, 0.12)",
+            padding: "18px 22px",
+            background:
+              "linear-gradient(135deg, rgba(224,247,246,0.95) 0%, rgba(255,255,255,1) 70%)",
+          },
+          body: {
+            padding: "22px 24px 10px",
+            background: "linear-gradient(180deg, #ffffff 0%, #fbfefd 100%)",
+          },
+          footer: {
+            borderTop: "1px solid rgba(0, 105, 92, 0.12)",
+            padding: "16px 24px 20px",
+            background: "#fff",
+          },
+        }}
+      >
+        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 16,
+            }}
+          >
+            <Form.Item
+              label="Route Name"
+              name="routeName"
+              rules={[{ required: true, message: "Please enter route name" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                size="large"
+                placeholder="Enter route name"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="City Name"
+              name="cityName"
+              rules={[{ required: true, message: "Please enter city name" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                size="large"
+                placeholder="Enter city name"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+          </div>
+        </Form>
       </Modal>
     </div>
   );

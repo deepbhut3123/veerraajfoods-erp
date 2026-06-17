@@ -1,8 +1,38 @@
-import React, { useEffect, useState } from "react";
-import { Alert, Button, Card, Modal, Space, Table, Tag, Typography, message } from "antd";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Popconfirm,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+  message,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { ReloadOutlined } from "@ant-design/icons";
-import { getAllAdminBills, markAdminBillsAsShipped } from "../../Utils/Api";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+} from "@ant-design/icons";
+import {
+  addAdminBill,
+  bulkDeleteAdminBills,
+  deleteAdminBill,
+  getAllAdminBills,
+  getAllAdminRoutes,
+  getAllAdminShops,
+  getAllProducts,
+  markAdminBillsAsCompleted,
+  updateAdminBill,
+} from "../../Utils/Api";
 import "./Index.css";
 
 const { Title, Text } = Typography;
@@ -11,6 +41,7 @@ type BillProductRef = {
   _id?: string;
   mrp?: number;
   productName?: string;
+  productRate?: number;
 };
 
 type BillLineItem = {
@@ -75,6 +106,40 @@ type SummaryRow = {
   total: number;
 };
 
+type AdminRoute = {
+  _id: string;
+  routeName: string;
+  cityName: string;
+};
+
+type AdminShop = {
+  _id: string;
+  shopName?: string;
+  shopAddress?: string;
+  mobileNumber?: string;
+  routeId?: {
+    _id?: string;
+    routeName?: string;
+    cityName?: string;
+  };
+};
+
+type ProductOption = {
+  _id: string;
+  productName: string;
+  mrp?: number;
+  productRate?: number;
+};
+
+type BillFormValues = {
+  routeId: string;
+  shopId: string;
+  items: Array<{
+    productId?: string;
+    quantity?: number;
+  }>;
+};
+
 const THEME = {
   dark: "#004D40",
   mid: "#00695C",
@@ -96,8 +161,12 @@ const formatDate = (value?: string) => {
   if (Number.isNaN(date.getTime())) return "-";
 
   return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
   }).format(date);
 };
 
@@ -106,9 +175,9 @@ const normalizeStatus = (status?: string) => status?.trim().toLowerCase() || "un
 const statusMeta = (status?: string): StatusStyle => {
   const normalized = normalizeStatus(status);
 
-  if (["paid", "complete", "completed", "settled"].includes(normalized)) {
+  if (["complete", "completed", "order complete", "order completed", "settled"].includes(normalized)) {
     return {
-      label: "Paid",
+      label: "Completed",
       color: "#0f766e",
       background: "rgba(0, 105, 92, 0.08)",
       border: "rgba(0, 105, 92, 0.18)",
@@ -203,19 +272,37 @@ const escapeHtml = (value: string) =>
 
 const BillsPage: React.FC = () => {
   const [data, setData] = useState<BillItem[]>([]);
+  const [routes, setRoutes] = useState<AdminRoute[]>([]);
+  const [shops, setShops] = useState<AdminShop[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [activeBill, setActiveBill] = useState<BillItem | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingItem, setEditingItem] = useState<BillItem | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [debouncedSearchText, setDebouncedSearchText] = useState("");
+  const [form] = Form.useForm<BillFormValues>();
+  const currentUserRoleId = useMemo(() => {
+    const stored = JSON.parse(localStorage.getItem("authData") || "{}");
+    return stored?.user?.roleId;
+  }, []);
+  const watchedItems = Form.useWatch("items", form) || [];
 
-  const loadBills = async () => {
+  const loadBills = async (search?: string) => {
     setLoading(true);
     setError("");
 
     try {
-      const res = await getAllAdminBills();
-      setData(res?.data || []);
+      const billsRes = await getAllAdminBills({
+        search: search?.trim() || undefined,
+      });
+      setData(billsRes?.data || []);
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || "Failed to load bills");
     } finally {
@@ -224,8 +311,210 @@ const BillsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    loadBills();
+    const loadStaticData = async () => {
+      try {
+        const [routesRes, shopsRes, productsRes] = await Promise.all([
+          getAllAdminRoutes(),
+          getAllAdminShops(),
+          getAllProducts(),
+        ]);
+        setRoutes(routesRes?.data || []);
+        setShops(shopsRes?.data || []);
+        setProducts(productsRes?.data || []);
+      } catch (err: any) {
+        setError(
+          err?.response?.data?.message || err?.message || "Failed to load bill form data",
+        );
+      }
+    };
+
+    void loadStaticData();
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchText(searchText.trim());
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [searchText]);
+
+  useEffect(() => {
+    void loadBills(debouncedSearchText);
+  }, [debouncedSearchText]);
+
+  const selectedRouteId = Form.useWatch("routeId", form);
+
+  const filteredShops = useMemo(
+    () =>
+      shops.filter((shop) =>
+        selectedRouteId
+          ? shop.routeId?._id === selectedRouteId
+          : true,
+      ),
+    [selectedRouteId, shops],
+  );
+
+  const canEditBill = (record: BillItem) =>
+    currentUserRoleId === 1 || normalizeStatus(record.status) === "ordered";
+  const canDeleteBill = (record: BillItem) =>
+    currentUserRoleId === 1 || normalizeStatus(record.status) === "ordered";
+
+  const openCreate = () => {
+    setEditingItem(null);
+    form.resetFields();
+    form.setFieldsValue({
+      items: products.map((product) => ({
+        productId: product._id,
+        quantity: undefined,
+      })),
+    });
+    setModalOpen(true);
+  };
+
+  const openEdit = (item: BillItem) => {
+    const quantityByProductId = new Map(
+      (item.items || []).map((line) => [
+        typeof line.productId === "object" ? line.productId?._id : line.productId,
+        line.quantity,
+      ]),
+    );
+
+    setEditingItem(item);
+    form.setFieldsValue({
+      routeId: item.routeId?._id,
+      shopId: item.shopId?._id,
+      items: products.map((product) => ({
+        productId: product._id,
+        quantity: quantityByProductId.get(product._id),
+      })),
+    });
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingItem(null);
+    form.resetFields();
+  };
+
+  const handleRouteChange = () => {
+    form.setFieldValue("shopId", undefined);
+  };
+
+  const billDraftTotal = useMemo(() => {
+    return products.reduce((sum, product, index) => {
+      const quantity = Number(watchedItems?.[index]?.quantity || 0);
+      const rate = Number(product.productRate || 0);
+
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return sum;
+      }
+
+      return sum + quantity * rate;
+    }, 0);
+  }, [products, watchedItems]);
+
+  const handleSubmit = async (values: BillFormValues) => {
+    setSaving(true);
+
+    try {
+      const payload = {
+        routeId: values.routeId,
+        shopId: values.shopId,
+        items: (values.items || [])
+          .filter((item) => item.productId && Number(item.quantity) > 0)
+          .map((item) => ({
+            productId: String(item.productId),
+            quantity: Number(item.quantity),
+          })),
+      };
+
+      if (editingItem?._id) {
+        await updateAdminBill(editingItem._id, payload);
+        message.success("Bill updated successfully");
+      } else {
+        await addAdminBill(payload);
+        message.success("Bill created successfully");
+      }
+
+      closeModal();
+      await loadBills();
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to save bill",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAdminBill(id);
+      message.success("Bill deleted successfully");
+      if (activeBill?._id === id) {
+        setActiveBill(null);
+      }
+      await loadBills();
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to delete bill",
+      );
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const billIds = selectedRowKeys.map(String).filter(Boolean);
+
+    if (!billIds.length) {
+      message.warning("Select at least one bill to delete");
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      await bulkDeleteAdminBills(billIds);
+      message.success("Selected bills deleted successfully");
+      setSelectedRowKeys([]);
+      if (activeBill) {
+        const activeId = activeBill._id || activeBill.id || "";
+        if (billIds.includes(activeId)) {
+          setActiveBill(null);
+        }
+      }
+      await loadBills();
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to delete selected bills",
+      );
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const handleCompleteOrders = async () => {
+    const billIds = selectedRowKeys.map(String).filter(Boolean);
+
+    if (!billIds.length) {
+      message.warning("Select at least one bill to complete");
+      return;
+    }
+
+    setCompleting(true);
+    try {
+      await markAdminBillsAsCompleted(billIds);
+      message.success("Selected bills marked as completed");
+      setSelectedRowKeys([]);
+      await loadBills();
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to complete selected bills",
+      );
+    } finally {
+      setCompleting(false);
+    }
+  };
 
   const itemColumns: ColumnsType<BillLineItem> = [
     {
@@ -400,15 +689,6 @@ const BillsPage: React.FC = () => {
       return;
     }
 
-    const billIds = selectedBills
-      .map((bill) => bill._id || bill.id)
-      .filter((value): value is string => Boolean(value));
-
-    if (billIds.length === 0) {
-      message.error("Selected bills are missing ids");
-      return;
-    }
-
     const popup = window.open("", "_blank", "width=1100,height=800");
 
     if (!popup) {
@@ -419,11 +699,8 @@ const BillsPage: React.FC = () => {
     setSummaryLoading(true);
 
     try {
-      await markAdminBillsAsShipped(billIds);
       generateSummaryPdf(selectedBills, popup);
-      message.success("Summary generated and selected bills marked as shipped");
-      setSelectedRowKeys([]);
-      await loadBills();
+      message.success("Summary generated successfully");
     } catch (err: any) {
       popup.close();
       message.error(
@@ -455,9 +732,24 @@ const BillsPage: React.FC = () => {
       ),
     },
     {
-      title: "Party / Shop",
-      key: "party",
+      title: "Bill Date",
+      key: "createdAt",
+      width: 170,
+      render: (_, record) => formatDate(record.createdAt || record.updatedAt),
+    },
+    {
+      title: "Shop Name",
+      key: "shopName",
       render: (_, record) => getPartyName(record),
+    },
+    {
+      title: "Amount",
+      key: "amount",
+      render: (_, record) => (
+        <Tag color="green" style={{ borderRadius: 999, margin: 0 }}>
+          {formatCurrency(getBillAmount(record))}
+        </Tag>
+      ),
     },
     {
       title: "Route",
@@ -470,16 +762,8 @@ const BillsPage: React.FC = () => {
     {
       title: "Created By",
       key: "createdBy",
+      width: 220,
       render: (_, record) => record.userId?.name || record.userId?.email || "-",
-    },
-    {
-      title: "Amount",
-      key: "amount",
-      render: (_, record) => (
-        <Tag color="green" style={{ borderRadius: 999, margin: 0 }}>
-          {formatCurrency(getBillAmount(record))}
-        </Tag>
-      ),
     },
     {
       title: "Status",
@@ -506,9 +790,70 @@ const BillsPage: React.FC = () => {
       },
     },
     {
-      title: "Created At",
-      key: "createdAt",
-      render: (_, record) => formatDate(record.createdAt || record.updatedAt),
+      title: "Actions",
+      key: "actions",
+      width: 112,
+      render: (_, record) => {
+        const billId = record._id || record.id || "";
+        const editDisabled = !canEditBill(record);
+        const deleteDisabled = !canDeleteBill(record);
+        const tooltipMessage = editDisabled
+          ? "Only ordered bills can be edited"
+          : "Edit bill";
+
+        return (
+          <Space size={4}>
+            <Tooltip title={tooltipMessage}>
+              <Button
+                type="text"
+                aria-label="Edit bill"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openEdit(record);
+                }}
+                disabled={editDisabled}
+                icon={<EditOutlined />}
+                style={{
+                  color: THEME.mid,
+                  borderRadius: 10,
+                  width: 32,
+                  height: 32,
+                }}
+              />
+            </Tooltip>
+            <Popconfirm
+              title="Delete bill"
+              description="Are you sure you want to delete this bill?"
+              okText="Delete"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => handleDelete(billId)}
+              disabled={deleteDisabled}
+            >
+              <Tooltip
+                title={
+                  deleteDisabled
+                    ? "Only ordered bills can be deleted"
+                    : "Delete bill"
+                }
+              >
+                <Button
+                  type="text"
+                  aria-label="Delete bill"
+                  danger
+                  disabled={deleteDisabled}
+                  icon={<DeleteOutlined />}
+                  onClick={(event) => event.stopPropagation()}
+                  style={{
+                    borderRadius: 10,
+                    width: 32,
+                    height: 32,
+                  }}
+                />
+              </Tooltip>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -547,6 +892,47 @@ const BillsPage: React.FC = () => {
           </div>
 
           <Space wrap>
+            <Input
+              allowClear
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search bills..."
+              size="large"
+              style={{
+                width: 280,
+                borderRadius: 12,
+              }}
+            />
+            <Popconfirm
+              title="Mark selected bills as completed"
+              description="Are you sure you want to mark all selected bills as completed?"
+              okText="Yes"
+              cancelText="No"
+              okButtonProps={{ loading: completing }}
+              onConfirm={handleCompleteOrders}
+              disabled={!selectedRowKeys.length}
+            >
+              <Button
+                onClick={(event) => {
+                  if (!selectedRowKeys.length) {
+                    event.preventDefault();
+                  }
+                }}
+                loading={completing}
+                disabled={!selectedRowKeys.length}
+                style={{
+                  height: 42,
+                  paddingInline: 18,
+                  borderRadius: 12,
+                  border: "1px solid rgba(0, 105, 92, 0.18)",
+                  color: "#fff",
+                  fontWeight: 600,
+                  background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)",
+                }}
+              >
+                Order Complete
+              </Button>
+            </Popconfirm>
             <Button
               onClick={handleGenerateSummary}
               loading={summaryLoading}
@@ -555,30 +941,60 @@ const BillsPage: React.FC = () => {
                 height: 42,
                 paddingInline: 18,
                 borderRadius: 12,
-                border: "1px solid rgba(0, 105, 92, 0.18)",
+                border: "1px solid rgba(37, 99, 235, 0.18)",
                 color: "#fff",
                 fontWeight: 600,
-                background: THEME.mid,
+                background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
               }}
             >
               Generate Summary
             </Button>
-
-            <Button
-              onClick={loadBills}
-              icon={<ReloadOutlined />}
-              style={{
-                height: 42,
-                paddingInline: 18,
-                borderRadius: 12,
-                border: "1px solid rgba(0, 105, 92, 0.18)",
-                color: THEME.dark,
-                fontWeight: 600,
-                background: "#fff",
-              }}
+            <Popconfirm
+              title="Delete selected bills"
+              description="Are you sure you want to delete all selected bills?"
+              okText="Yes"
+              cancelText="No"
+              okButtonProps={{ danger: true, loading: bulkDeleting }}
+              onConfirm={handleBulkDelete}
+              disabled={!selectedRowKeys.length}
             >
-              Refresh
-            </Button>
+              <Tooltip title="Delete selected bills">
+                <Button
+                  danger
+                  aria-label="Delete selected bills"
+                  icon={<DeleteOutlined />}
+                  disabled={!selectedRowKeys.length}
+                  loading={bulkDeleting}
+                  style={{
+                    height: 42,
+                    width: 42,
+                    minWidth: 42,
+                    paddingInline: 0,
+                    borderRadius: 12,
+                    fontWeight: 600,
+                  }}
+                />
+              </Tooltip>
+            </Popconfirm>
+            <Tooltip title="Add bill">
+              <Button
+                onClick={openCreate}
+                aria-label="Add bill"
+                icon={<PlusOutlined />}
+                style={{
+                  height: 42,
+                  width: 42,
+                  minWidth: 42,
+                  paddingInline: 0,
+                  borderRadius: 12,
+                  border: "none",
+                  color: "#fff",
+                  fontWeight: 600,
+                  background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+                  boxShadow: "0 10px 20px rgba(0, 105, 92, 0.18)",
+                }}
+              />
+            </Tooltip>
           </Space>
         </Space>
 
@@ -592,7 +1008,8 @@ const BillsPage: React.FC = () => {
             rowKey={(record, index) => getRecordKey(record, index)}
             loading={loading}
             dataSource={data}
-            pagination={{ pageSize: 10 }}
+            pagination={false}
+            scroll={{ x: "max-content", y: 520 }}
             columns={columns}
             rowSelection={{
               selectedRowKeys,
@@ -602,7 +1019,12 @@ const BillsPage: React.FC = () => {
             onRow={(record) => ({
               onClick: (event) => {
                 const target = event.target as HTMLElement;
-                if (target.closest(".ant-table-selection-column")) {
+                if (
+                  target.closest(".ant-table-selection-column") ||
+                  target.closest("button") ||
+                  target.closest(".ant-btn") ||
+                  target.closest(".ant-popover")
+                ) {
                   return;
                 }
 
@@ -615,6 +1037,212 @@ const BillsPage: React.FC = () => {
       </Card>
 
       <Modal
+        title={
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontWeight: 700, color: THEME.dark }}>
+              {editingItem ? "Edit Bill" : "New Bill"}
+            </span>
+            <span style={{ color: "#64748b", fontSize: 13, fontWeight: 400 }}>
+              Select route, shop and product quantities for this bill
+            </span>
+          </div>
+        }
+        open={modalOpen}
+        onCancel={closeModal}
+        onOk={() => form.submit()}
+        okButtonProps={{
+          loading: saving,
+          style: {
+            background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+            borderColor: "#00695C",
+            borderRadius: 10,
+          },
+        }}
+        cancelButtonProps={{ style: { borderRadius: 10 } }}
+        destroyOnClose
+        centered
+        width={860}
+        styles={{
+          header: {
+            borderBottom: "1px solid rgba(0, 105, 92, 0.12)",
+            padding: "18px 22px",
+            background:
+              "linear-gradient(135deg, rgba(224,247,246,0.95) 0%, rgba(255,255,255,1) 70%)",
+          },
+          body: {
+            padding: "22px 24px 10px",
+            background: "linear-gradient(180deg, #ffffff 0%, #fbfefd 100%)",
+          },
+          footer: {
+            borderTop: "1px solid rgba(0, 105, 92, 0.12)",
+            padding: "16px 24px 20px",
+            background: "#fff",
+          },
+        }}
+      >
+        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 16,
+            }}
+          >
+            <Form.Item
+              label="Route"
+              name="routeId"
+              rules={[{ required: true, message: "Please select route" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <Select
+                size="large"
+                placeholder="Select route"
+                onChange={handleRouteChange}
+                options={routes.map((route) => ({
+                  value: route._id,
+                  label: `${route.routeName}${route.cityName ? ` - ${route.cityName}` : ""}`,
+                }))}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Shop"
+              name="shopId"
+              rules={[{ required: true, message: "Please select shop" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <Select
+                size="large"
+                placeholder="Select shop"
+                disabled={!selectedRouteId}
+                options={filteredShops.map((shop) => ({
+                  value: shop._id,
+                  label: shop.shopName || "Shop",
+                }))}
+              />
+            </Form.Item>
+          </div>
+
+          <div style={{ marginTop: 20 }}>
+            <Text strong>Products</Text>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <Table
+              rowKey="_id"
+              pagination={false}
+              scroll={{ y: 320 }}
+              dataSource={products}
+              columns={[
+                {
+                  title: "Product",
+                  key: "product",
+                  width: 360,
+                  render: (_, product) => (
+                    <Text
+                      strong
+                      style={{
+                        whiteSpace: "nowrap",
+                        display: "inline-block",
+                      }}
+                    >
+                      {formatCurrency(product.mrp)} {product.productName}
+                    </Text>
+                  ),
+                },
+                {
+                  title: "Quantity",
+                  key: "quantity",
+                  width: 115,
+                  render: (_, product, index) => (
+                    <Form.Item
+                      name={["items", index, "quantity"]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <InputNumber
+                        min={0}
+                        precision={0}
+                        size="middle"
+                        style={{ width: 88 }}
+                        placeholder="Qty"
+                      />
+                    </Form.Item>
+                  ),
+                },
+                {
+                  title: "",
+                  key: "multiplySign",
+                  width: 48,
+                  align: "center",
+                  render: () => <Text strong>x</Text>,
+                },
+                {
+                  title: "Rate",
+                  key: "rate",
+                  width: 110,
+                  render: (_, product) => formatCurrency(product.productRate),
+                },
+                {
+                  title: "",
+                  key: "equalsSign",
+                  width: 48,
+                  align: "center",
+                  render: () => <Text strong>=</Text>,
+                },
+                {
+                  title: "Total",
+                  key: "total",
+                  width: 120,
+                  render: (_, product, index) => {
+                    const quantity = Number(watchedItems?.[index]?.quantity || 0);
+                    const lineTotal =
+                      Number.isFinite(quantity) && quantity > 0
+                        ? quantity * Number(product.productRate || 0)
+                        : 0;
+
+                    return <Text strong>{formatCurrency(lineTotal)}</Text>;
+                  },
+                },
+              ]}
+            />
+          </div>
+
+          <div style={{ display: "none" }}>
+            {products.map((product, index) => (
+              <Form.Item
+                key={product._id}
+                name={["items", index, "productId"]}
+                initialValue={product._id}
+                style={{ marginBottom: 0 }}
+              >
+                <Input />
+              </Form.Item>
+            ))}
+          </div>
+
+          <div
+            style={{
+              marginTop: 18,
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
+            <Tag
+              color="green"
+              style={{
+                margin: 0,
+                borderRadius: 999,
+                padding: "8px 14px",
+                fontWeight: 700,
+              }}
+            >
+              Total: {formatCurrency(billDraftTotal)}
+            </Tag>
+          </div>
+        </Form>
+      </Modal>
+
+      <Modal
         open={Boolean(activeBill)}
         onCancel={() => setActiveBill(null)}
         footer={null}
@@ -625,97 +1253,130 @@ const BillsPage: React.FC = () => {
           <Space direction="vertical" size={16} style={{ width: "100%" }}>
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: 12,
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                borderRadius: 16,
+                padding: 18,
+                background: "#fff",
               }}
             >
-              <Card size="small" bordered={false} style={{ background: "#f7fffd" }}>
-                <Text type="secondary">Bill No</Text>
-                <div>
-                  <Text strong>{getBillSequence(data, activeBill)}</Text>
-                </div>
-              </Card>
-              <Card size="small" bordered={false} style={{ background: "#f7fffd" }}>
-                <Text type="secondary">Party / Shop</Text>
-                <div>
-                  <Text strong>{getPartyName(activeBill)}</Text>
-                </div>
-              </Card>
-              <Card size="small" bordered={false} style={{ background: "#f7fffd" }}>
-                <Text type="secondary">Route</Text>
-                <div>
-                  <Text strong>
-                    {activeBill.routeId?.routeName || "-"}
-                    {activeBill.routeId?.cityName ? `, ${activeBill.routeId.cityName}` : ""}
-                  </Text>
-                </div>
-              </Card>
-              <Card size="small" bordered={false} style={{ background: "#f7fffd" }}>
-                <Text type="secondary">Created By</Text>
-                <div>
-                  <Text strong>{activeBill.userId?.name || activeBill.userId?.email || "-"}</Text>
-                </div>
-              </Card>
-              <Card size="small" bordered={false} style={{ background: "#f7fffd" }}>
-                <Text type="secondary">Status</Text>
-                <div>
-                  <Tag
-                    style={{
-                      marginTop: 4,
-                      borderRadius: 999,
-                      padding: "2px 10px",
-                      border: `1px solid ${statusMeta(activeBill.status).border}`,
-                      background: statusMeta(activeBill.status).background,
-                      color: statusMeta(activeBill.status).color,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {statusMeta(activeBill.status).label}
-                  </Tag>
-                </div>
-              </Card>
-              <Card size="small" bordered={false} style={{ background: "#f7fffd" }}>
-                <Text type="secondary">Created At</Text>
-                <div>
-                  <Text strong>{formatDate(activeBill.createdAt || activeBill.updatedAt)}</Text>
-                </div>
-              </Card>
-            </div>
-
-            <Card
-              size="small"
-              bordered={false}
-              style={{ background: "#fcfffe", border: "1px solid rgba(0, 105, 92, 0.08)" }}
-            >
-              <Space direction="vertical" size={4}>
-                <Text type="secondary">Shop Address</Text>
-                <Text>{activeBill.shopId?.shopAddress || "-"}</Text>
-                <Text type="secondary">Mobile</Text>
-                <Text>{activeBill.shopId?.mobileNumber || "-"}</Text>
-              </Space>
-            </Card>
-
-            <Table
-              rowKey={(record, index) => getProductKey(record, index)}
-              dataSource={activeBill.items || []}
-              columns={itemColumns}
-              pagination={false}
-              locale={{ emptyText: "No bill items found" }}
-            />
-
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <Tag
-                color="green"
+              <div
                 style={{
-                  margin: 0,
-                  borderRadius: 999,
-                  padding: "8px 14px",
-                  fontWeight: 700,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  flexWrap: "wrap",
+                  borderBottom: "1px solid rgba(15, 23, 42, 0.12)",
+                  paddingBottom: 14,
                 }}
               >
-                Grand Total: {formatCurrency(getBillAmount(activeBill))}
-              </Tag>
+                <div>
+                  <Text type="secondary">Bill No</Text>
+                  <div>
+                    <Text strong style={{ fontSize: 18 }}>
+                      {getBillSequence(data, activeBill)}
+                    </Text>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <Text type="secondary">Bill Date</Text>
+                  <div>
+                    <Text strong>{formatDate(activeBill.createdAt || activeBill.updatedAt)}</Text>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div>
+                    <Text strong>Shop Name : </Text>
+                    <Text>{getPartyName(activeBill)}</Text>
+                    <Text style={{ marginLeft: 8 }}>
+                      - {activeBill.shopId?.mobileNumber || "-"}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text strong>Address : </Text>
+                    <Text>{activeBill.shopId?.shopAddress || "-"}</Text>
+                  </div>
+                  <div>
+                    <Text strong>Sales Man : </Text>
+                    <Text>{activeBill.userId?.name || activeBill.userId?.email || "-"}</Text>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 18 }}>
+                <Table
+                  rowKey={(record, index) => getProductKey(record, index)}
+                  dataSource={activeBill.items || []}
+                  pagination={false}
+                  scroll={{ x: "max-content" }}
+                  locale={{ emptyText: "No bill items found" }}
+                  columns={[
+                    {
+                      title: "Product",
+                      key: "productName",
+                      render: (_, record) => {
+                        const mrp = formatCurrency(getProductMrp(record));
+                        return `${mrp} ${record.productName || "-"}`;
+                      },
+                    },
+                    {
+                      title: "Quantity",
+                      dataIndex: "quantity",
+                      key: "quantity",
+                      render: (value) => value ?? "-",
+                      width: 110,
+                    },
+                    {
+                      title: "",
+                      key: "multiplySign",
+                      width: 50,
+                      align: "center",
+                      render: () => <Text strong>x</Text>,
+                    },
+                    {
+                      title: "Rate",
+                      key: "productRate",
+                      render: (_, record) => formatCurrency(record.productRate),
+                      width: 130,
+                    },
+                    {
+                      title: "",
+                      key: "equalsSign",
+                      width: 50,
+                      align: "center",
+                      render: () => <Text strong>=</Text>,
+                    },
+                    {
+                      title: "Total",
+                      key: "total",
+                      render: (_, record) => formatCurrency(record.total),
+                      width: 160,
+                    },
+                  ]}
+                />
+              </div>
+
+              <div
+                style={{
+                  marginTop: 18,
+                  display: "flex",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(0, 105, 92, 0.15)",
+                    background: "rgba(0, 105, 92, 0.06)",
+                  }}
+                >
+                  <Text strong>Total Amount : {formatCurrency(getBillAmount(activeBill))}</Text>
+                </div>
+              </div>
             </div>
           </Space>
         ) : null}

@@ -77,27 +77,171 @@ export const getAdminDashboardSummary = async (params?: {
   }
 };
 
-export const getAllAdminRoutes = async () => {
+export const getAllAdminRoutes = async (params?: { search?: string }) => {
   try {
-    const response = await API.get("/admin/routes/all");
+    const response = await API.get("/admin/routes/all", { params });
     return response.data;
   } catch (error) {
     throw error;
   }
 };
 
-export const getAllAdminShops = async () => {
+export const addAdminRoute = async (data: {
+  routeName: string;
+  cityName: string;
+}) => {
   try {
-    const response = await API.get("/admin/shops");
+    const response = await API.post("/admin/routes", data);
     return response.data;
   } catch (error) {
     throw error;
   }
 };
 
-export const getAllAdminBills = async () => {
+export const updateAdminRoute = async (
+  id: string,
+  data: {
+    routeName: string;
+    cityName: string;
+  },
+) => {
   try {
-    const response = await API.get("/admin/bills/all");
+    const response = await API.put(`/admin/routes/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteAdminRoute = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/routes/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllAdminShops = async (params?: { search?: string }) => {
+  try {
+    const response = await API.get("/admin/shops", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const addAdminShop = async (data: {
+  routeId: string;
+  shopName: string;
+  shopAddress: string;
+  mobileNumber: string;
+  latitude?: number;
+  longitude?: number;
+  imageUrl?: string;
+}) => {
+  try {
+    const response = await API.post("/admin/shops", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateAdminShop = async (
+  id: string,
+  data: {
+    routeId: string;
+    shopName: string;
+    shopAddress: string;
+    mobileNumber: string;
+    latitude?: number;
+    longitude?: number;
+    imageUrl?: string;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/shops/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteAdminShop = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/shops/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllAdminBills = async (params?: { search?: string }) => {
+  try {
+    const response = await API.get("/admin/bills/all", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const addAdminBill = async (data: {
+  routeId: string;
+  shopId: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+}) => {
+  try {
+    const response = await API.post("/admin/bills", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateAdminBill = async (
+  id: string,
+  data: {
+    routeId: string;
+    shopId: string;
+    items: Array<{
+      productId: string;
+      quantity: number;
+    }>;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/bills/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteAdminBill = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/bills/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const bulkDeleteAdminBills = async (billIds: string[]) => {
+  try {
+    const response = await API.delete("/admin/bills", { data: { billIds } });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const markAdminBillsAsCompleted = async (billIds: string[]) => {
+  try {
+    const response = await API.patch("/admin/bills/complete", { billIds });
     return response.data;
   } catch (error) {
     throw error;
@@ -154,6 +298,15 @@ export const updateProduct = async (
 export const deleteProduct = async (id: string) => {
   try {
     const response = await API.delete(`/admin/products/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const reorderProducts = async (productIds: string[]) => {
+  try {
+    const response = await API.patch("/admin/products/reorder", { productIds });
     return response.data;
   } catch (error) {
     throw error;

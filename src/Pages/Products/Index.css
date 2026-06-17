@@ -5,3 +5,19 @@
 .product-row td {
   transition: background-color 0.2s ease;
 }
+
+.product-row {
+  cursor: grab;
+}
+
+.product-row-dragging td {
+  background: #dff7f2 !important;
+}
+
+.product-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #00695c;
+  font-size: 18px;
+}

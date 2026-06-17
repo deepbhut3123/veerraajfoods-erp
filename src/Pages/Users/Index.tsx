@@ -380,7 +380,8 @@ const UsersPage: React.FC = () => {
             rowKey={(record) => record._id || record.id || record.email}
             loading={loading}
             dataSource={data}
-            pagination={{ pageSize: 10 }}
+            pagination={false}
+            scroll={{ x: "max-content", y: 520 }}
             columns={columns}
             rowClassName={() => "user-row"}
           />
