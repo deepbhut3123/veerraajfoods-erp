@@ -36,6 +36,7 @@ import {
 import "./Index.css";
 
 const { Title, Text } = Typography;
+const EMPTY_BILL_ITEMS: BillFormValues["items"] = [];
 
 type BillProductRef = {
   _id?: string;
@@ -292,7 +293,7 @@ const BillsPage: React.FC = () => {
     const stored = JSON.parse(localStorage.getItem("authData") || "{}");
     return stored?.user?.roleId;
   }, []);
-  const watchedItems = Form.useWatch("items", form) || [];
+  const watchedItems = Form.useWatch("items", form) ?? EMPTY_BILL_ITEMS;
 
   const loadBills = async (search?: string) => {
     setLoading(true);
@@ -515,40 +516,6 @@ const BillsPage: React.FC = () => {
       setCompleting(false);
     }
   };
-
-  const itemColumns: ColumnsType<BillLineItem> = [
-    {
-      title: "MRP",
-      key: "mrp",
-      render: (_, record) => formatCurrency(getProductMrp(record)),
-    },
-    {
-      title: "Product",
-      dataIndex: "productName",
-      key: "productName",
-      render: (value) => value || "-",
-    },
-    {
-      title: "Rate",
-      key: "productRate",
-      render: (_, record) => formatCurrency(record.productRate),
-    },
-    {
-      title: "Qty",
-      dataIndex: "quantity",
-      key: "quantity",
-      render: (value) => value ?? "-",
-    },
-    {
-      title: "Total",
-      key: "total",
-      render: (_, record) => (
-        <Tag color="green" style={{ borderRadius: 999, margin: 0 }}>
-          {formatCurrency(record.total)}
-        </Tag>
-      ),
-    },
-  ];
 
   const buildSummaryRows = (selectedBills: BillItem[]) => {
     const summaryMap = new Map<string, SummaryRow>();
