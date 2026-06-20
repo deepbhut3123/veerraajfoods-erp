@@ -29,7 +29,7 @@ import {
   updateDealer,
 } from "../../Utils/Api";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const THEME = {
   dark: "#004D40",
   mid: "#00695C",
