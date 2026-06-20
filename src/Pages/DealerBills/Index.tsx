@@ -88,6 +88,7 @@ type DealerBillMasterItem = {
   productName?: string;
   mrp?: number;
   productRate?: number;
+  amount?: number;
   quantity?: number;
 };
 
@@ -95,6 +96,7 @@ type DealerBillCustomItem = {
   productName?: string;
   mrp?: number;
   productRate?: number;
+  amount?: number;
   quantity?: number;
 };
 
@@ -109,12 +111,28 @@ type DealerBillFormValues = {
 const EMPTY_MASTER_ITEMS: DealerBillMasterItem[] = [];
 const EMPTY_CUSTOM_ITEMS: DealerBillCustomItem[] = [];
 
+const roundToTwo = (value?: number) => {
+  const normalizedValue = Number(value || 0);
+  return Number.isFinite(normalizedValue)
+    ? Math.round((normalizedValue + Number.EPSILON) * 100) / 100
+    : 0;
+};
+
 const formatCurrency = (value?: number) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(Number(value || 0));
+  }).format(roundToTwo(value));
+
+const formatRoundedCurrency = (value?: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(Number(value || 0)));
 
 const formatDate = (value?: string) => {
   if (!value) return "-";
@@ -124,8 +142,7 @@ const formatDate = (value?: string) => {
 
 const createEmptyCustomItem = (): DealerBillCustomItem => ({
   productName: "",
-  mrp: undefined,
-  productRate: undefined,
+  amount: undefined,
   quantity: undefined,
 });
 
@@ -144,6 +161,27 @@ const calculateAmountFromMargin = (rate?: number, margin?: number) => {
   }
 
   return (normalizedRate * 100) / divisor;
+};
+
+const resolveLineAmount = (amount?: number, rate?: number, margin?: number) => {
+  const normalizedAmount = Number(amount);
+
+  if (Number.isFinite(normalizedAmount) && normalizedAmount >= 0) {
+    return normalizedAmount;
+  }
+
+  return calculateAmountFromMargin(rate, margin);
+};
+
+const resolveCustomAmount = (amount?: number, productRate?: number) => {
+  const normalizedAmount = Number(amount);
+
+  if (Number.isFinite(normalizedAmount) && normalizedAmount >= 0) {
+    return normalizedAmount;
+  }
+
+  const normalizedRate = Number(productRate);
+  return Number.isFinite(normalizedRate) && normalizedRate >= 0 ? normalizedRate : 0;
 };
 
 const DealerBillsPage: React.FC = () => {
@@ -218,6 +256,32 @@ const DealerBillsPage: React.FC = () => {
     [dealers, selectedDealerId],
   );
 
+  useEffect(() => {
+    if (!modalOpen) return;
+
+    const currentItems = form.getFieldValue("items") || [];
+    if (currentItems.length) {
+      form.setFieldValue(
+        "items",
+        currentItems.map((item: DealerBillMasterItem) => ({
+          ...item,
+          amount: calculateAmountFromMargin(item?.productRate, selectedDealer?.margin),
+        })),
+      );
+    }
+
+    const currentCustomItems = form.getFieldValue("customItems") || [];
+    if (currentCustomItems.length) {
+      form.setFieldValue(
+        "customItems",
+        currentCustomItems.map((item: DealerBillCustomItem) => ({
+          ...item,
+          amount: item?.amount ?? item?.productRate,
+        })),
+      );
+    }
+  }, [form, modalOpen, selectedDealer?.margin]);
+
   const buildMasterItems = (bill?: DealerBillRecord | null) =>
     products.map((product) => {
       const matchedItem = bill?.items?.find((item) => {
@@ -231,6 +295,7 @@ const DealerBillsPage: React.FC = () => {
         productName: product.productName,
         mrp: product.mrp,
         productRate: matchedItem?.productRate ?? product.productRate,
+        amount: matchedItem?.amount,
         quantity: matchedItem?.quantity,
       };
     });
@@ -244,8 +309,8 @@ const DealerBillsPage: React.FC = () => {
       })
       .map((item) => ({
         productName: item.productName || "",
-        mrp: item.mrp,
         productRate: item.productRate,
+        amount: item.amount ?? item.productRate,
         quantity: item.quantity,
       }));
 
@@ -283,8 +348,11 @@ const DealerBillsPage: React.FC = () => {
   const billDraftTotal = useMemo(() => {
     const masterTotal = watchedItems.reduce((sum, item) => {
       const quantity = Number(item?.quantity || 0);
-      const rate = Number(item?.productRate || 0);
-      const amount = calculateAmountFromMargin(rate, selectedDealer?.margin);
+      const amount = resolveLineAmount(
+        item?.amount,
+        item?.productRate,
+        selectedDealer?.margin,
+      );
 
       if (!Number.isFinite(quantity) || quantity <= 0) {
         return sum;
@@ -295,8 +363,7 @@ const DealerBillsPage: React.FC = () => {
 
     const customTotal = watchedCustomItems.reduce((sum, item) => {
       const quantity = Number(item?.quantity || 0);
-      const rate = Number(item?.productRate || 0);
-      const amount = calculateAmountFromMargin(rate, selectedDealer?.margin);
+      const amount = resolveCustomAmount(item?.amount, item?.productRate);
 
       if (!Number.isFinite(quantity) || quantity <= 0) {
         return sum;
@@ -319,7 +386,8 @@ const DealerBillsPage: React.FC = () => {
           productName: String(item.productName || "").trim(),
           mrp: Number(item.mrp || 0),
           productRate: Number(item.productRate || 0),
-          amount: calculateAmountFromMargin(
+          amount: resolveLineAmount(
+            item.amount,
             Number(item.productRate || 0),
             selectedDealer?.margin,
           ),
@@ -331,18 +399,18 @@ const DealerBillsPage: React.FC = () => {
           (item) =>
             String(item.productName || "").trim() &&
             Number(item.quantity) > 0 &&
-            Number(item.productRate) >= 0,
+            Number(item.amount) >= 0,
         )
-        .map((item) => ({
-          productName: String(item.productName || "").trim(),
-          mrp: Number(item.mrp || 0),
-          productRate: Number(item.productRate || 0),
-          amount: calculateAmountFromMargin(
-            Number(item.productRate || 0),
-            selectedDealer?.margin,
-          ),
-          quantity: Number(item.quantity || 0),
-        }));
+        .map((item) => {
+          const constAmount = Number(item.amount || 0);
+          return {
+            productName: String(item.productName || "").trim(),
+            mrp: 0,
+            productRate: constAmount,
+            amount: resolveCustomAmount(item.amount, constAmount),
+            quantity: Number(item.quantity || 0),
+          };
+        });
 
       const payload = {
         dealerId: values.dealerId,
@@ -460,7 +528,7 @@ const DealerBillsPage: React.FC = () => {
       width: 150,
       render: (value: number) => (
         <Tag color="green" style={{ margin: 0 }}>
-          {formatCurrency(value)}
+          {formatRoundedCurrency(value)}
         </Tag>
       ),
     },
@@ -720,7 +788,7 @@ const DealerBillsPage: React.FC = () => {
               style={{
                 display: "grid",
                 gridTemplateColumns:
-                  "140px minmax(220px, 1.5fr) 180px 160px 140px 180px",
+                  "140px minmax(220px, 1.5fr) 180px 140px 180px",
                 gap: 16,
                 alignItems: "center",
                 padding: "18px 20px",
@@ -732,7 +800,6 @@ const DealerBillsPage: React.FC = () => {
             >
               <div>MRP</div>
               <div>Product</div>
-              <div>Rate</div>
               <div>Amount</div>
               <div>Qty</div>
               <div>Total</div>
@@ -741,20 +808,22 @@ const DealerBillsPage: React.FC = () => {
             <div style={{ maxHeight: 320, overflowY: "auto" }}>
               {products.map((product, index) => {
                 const quantity = Number(watchedItems?.[index]?.quantity || 0);
-                const amount = calculateAmountFromMargin(
+                const amount = resolveLineAmount(
+                  watchedItems?.[index]?.amount,
                   watchedItems?.[index]?.productRate ?? product.productRate,
                   selectedDealer?.margin,
                 );
-                const lineTotal =
-                  Number.isFinite(quantity) && quantity > 0 ? quantity * amount : 0;
+                const lineTotal = Number.isFinite(quantity) && quantity > 0
+                  ? quantity * amount
+                  : 0;
 
                 return (
                   <div
                     key={product._id}
-                    style={{
+                  style={{
                       display: "grid",
                       gridTemplateColumns:
-                        "140px minmax(220px, 1.5fr) 180px 160px 140px 180px",
+                        "140px minmax(220px, 1.5fr) 180px 140px 180px",
                       gap: 16,
                       alignItems: "center",
                       padding: "18px 20px",
@@ -769,21 +838,16 @@ const DealerBillsPage: React.FC = () => {
                     <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>
                       {product.productName}
                     </div>
-                    <Form.Item
-                      name={["items", index, "productRate"]}
-                      style={{ marginBottom: 0 }}
-                    >
+                    <Form.Item name={["items", index, "amount"]} style={{ marginBottom: 0 }}>
                       <InputNumber
                         min={0}
+                        precision={2}
                         step={0.01}
                         size="large"
                         style={{ width: "100%" }}
-                        placeholder="Rate"
+                        placeholder="Amount"
                       />
                     </Form.Item>
-                    <div style={{ fontSize: 16, fontWeight: 400, color: "#111827" }}>
-                      {formatCurrency(amount)}
-                    </div>
                     <Form.Item
                       name={["items", index, "quantity"]}
                       style={{ marginBottom: 0 }}
@@ -797,7 +861,7 @@ const DealerBillsPage: React.FC = () => {
                       />
                     </Form.Item>
                     <div style={{ fontSize: 16, fontWeight: 400, color: "#111827" }}>
-                      {formatCurrency(lineTotal)}
+                      {formatRoundedCurrency(lineTotal)}
                     </div>
                   </div>
                 );
@@ -832,6 +896,12 @@ const DealerBillsPage: React.FC = () => {
                 <Form.Item
                   name={["items", index, "productRate"]}
                   initialValue={product.productRate}
+                  style={{ marginBottom: 0 }}
+                >
+                  <InputNumber />
+                </Form.Item>
+                <Form.Item
+                  name={["items", index, "amount"]}
                   style={{ marginBottom: 0 }}
                 >
                   <InputNumber />
@@ -876,8 +946,6 @@ const DealerBillsPage: React.FC = () => {
                       <thead>
                         <tr>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Product</th>
-                          <th style={{ textAlign: "left", paddingRight: 8 }}>MRP</th>
-                          <th style={{ textAlign: "left", paddingRight: 8 }}>Rate</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Amount</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Qty</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Total</th>
@@ -886,16 +954,6 @@ const DealerBillsPage: React.FC = () => {
                       </thead>
                       <tbody>
                         {fields.map((field, index) => {
-                          const currentItem = watchedCustomItems?.[index];
-                          const quantity = Number(currentItem?.quantity || 0);
-                          const rate = Number(currentItem?.productRate || 0);
-                          const amount = calculateAmountFromMargin(
-                            rate,
-                            selectedDealer?.margin,
-                          );
-                          const lineTotal =
-                            Number.isFinite(quantity) && quantity > 0 ? quantity * amount : 0;
-
                           return (
                             <tr key={field.key}>
                               <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 260 }}>
@@ -913,45 +971,19 @@ const DealerBillsPage: React.FC = () => {
                               </td>
                               <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 130 }}>
                                 <Form.Item
-                                  name={[field.name, "mrp"]}
+                                  name={[field.name, "amount"]}
+                                  rules={[{ required: true, message: "Enter amount" }]}
                                   style={{ marginBottom: 0 }}
                                 >
                                   <InputNumber
                                     min={0}
+                                    precision={2}
                                     step={0.01}
                                     size="large"
-                                    placeholder="MRP"
+                                    placeholder="Amount"
                                     style={{ width: "100%" }}
                                   />
                                 </Form.Item>
-                              </td>
-                              <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 130 }}>
-                                <Form.Item
-                                  name={[field.name, "productRate"]}
-                                  rules={[{ required: true, message: "Enter rate" }]}
-                                  style={{ marginBottom: 0 }}
-                                >
-                                  <InputNumber
-                                    min={0}
-                                    step={0.01}
-                                    size="large"
-                                    placeholder="Rate"
-                                    style={{ width: "100%" }}
-                                  />
-                                </Form.Item>
-                              </td>
-                              <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 130 }}>
-                                <div
-                                  style={{
-                                    height: 48,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    fontWeight: 400,
-                                    fontSize: 16,
-                                  }}
-                                >
-                                  {formatCurrency(amount)}
-                                </div>
                               </td>
                               <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 110 }}>
                                 <Form.Item
@@ -969,17 +1001,32 @@ const DealerBillsPage: React.FC = () => {
                                 </Form.Item>
                               </td>
                               <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 130 }}>
-                                <div
-                                  style={{
-                                    height: 48,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    fontWeight: 400,
-                                    fontSize: 16,
+                                <Form.Item shouldUpdate noStyle>
+                                  {() => {
+                                    const liveItem =
+                                      form.getFieldValue(["customItems", field.name]) || {};
+                                    const liveQuantity = Number(liveItem?.quantity || 0);
+                                    const liveAmount = Number(liveItem?.amount || 0);
+                                    const liveLineTotal =
+                                      Number.isFinite(liveQuantity) && liveQuantity > 0
+                                        ? liveQuantity * liveAmount
+                                        : 0;
+
+                                    return (
+                                      <div
+                                        style={{
+                                          height: 48,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          fontWeight: 400,
+                                          fontSize: 16,
+                                        }}
+                                      >
+                                        {formatRoundedCurrency(liveLineTotal)}
+                                      </div>
+                                    );
                                   }}
-                                >
-                                  {formatCurrency(lineTotal)}
-                                </div>
+                                </Form.Item>
                               </td>
                               <td style={{ verticalAlign: "top", width: 70 }}>
                                 <Button
@@ -1043,7 +1090,7 @@ const DealerBillsPage: React.FC = () => {
                   color: "#111827",
                 }}
               >
-                Total: {formatCurrency(billDraftTotal)}
+                Total: {formatRoundedCurrency(billDraftTotal)}
               </div>
             </div>
           </div>
@@ -1150,49 +1197,52 @@ const DealerBillsPage: React.FC = () => {
                       render: (_, record) => record.productName || "-",
                     },
                     {
-                      title: "Quantity",
+                      title: "Amount",
+                      key: "amount",
+                      render: (_, record) => {
+                        const itemProductId =
+                          typeof record.productId === "object"
+                            ? record.productId?._id
+                            : record.productId;
+                        const amount = itemProductId
+                          ? resolveLineAmount(
+                              record.amount,
+                              record.productRate,
+                              activeBill.dealerId?.margin,
+                            )
+                          : resolveCustomAmount(record.amount, record.productRate);
+
+                        return formatRoundedCurrency(amount);
+                      },
+                      width: 130,
+                    },
+                    {
+                      title: "Qty",
                       dataIndex: "quantity",
                       key: "quantity",
                       render: (value) => value ?? 0,
                       width: 110,
                     },
                     {
-                      title: "",
-                      key: "multiplySign",
-                      width: 50,
-                      align: "center",
-                      render: () => <Text strong>x</Text>,
-                    },
-                    {
-                      title: "Rate",
-                      key: "productRate",
-                      render: (_, record) => formatCurrency(record.productRate),
-                      width: 130,
-                    },
-                    {
-                      title: "Amount",
-                      key: "amount",
-                      render: (_, record) =>
-                        formatCurrency(
-                          record.amount ??
-                            calculateAmountFromMargin(
-                              record.productRate,
-                              activeBill.dealerId?.margin,
-                            ),
-                        ),
-                      width: 130,
-                    },
-                    {
-                      title: "",
-                      key: "equalsSign",
-                      width: 50,
-                      align: "center",
-                      render: () => <Text strong>=</Text>,
-                    },
-                    {
                       title: "Total",
                       key: "total",
-                      render: (_, record) => formatCurrency(record.total),
+                      render: (_, record) => {
+                        const itemProductId =
+                          typeof record.productId === "object"
+                            ? record.productId?._id
+                            : record.productId;
+                        const amount = itemProductId
+                          ? resolveLineAmount(
+                              record.amount,
+                              record.productRate,
+                              activeBill.dealerId?.margin,
+                            )
+                          : resolveCustomAmount(record.amount, record.productRate);
+
+                        return formatRoundedCurrency(
+                          record.total ?? Number(record.quantity || 0) * amount,
+                        );
+                      },
                       width: 160,
                     },
                   ]}
@@ -1228,7 +1278,9 @@ const DealerBillsPage: React.FC = () => {
                     background: "rgba(0, 105, 92, 0.06)",
                   }}
                 >
-                  <Text strong>Total Amount : {formatCurrency(activeBill.totalAmount)}</Text>
+                  <Text strong>
+                    Total Amount : {formatRoundedCurrency(activeBill.totalAmount)}
+                  </Text>
                 </div>
               </div>
             </div>
