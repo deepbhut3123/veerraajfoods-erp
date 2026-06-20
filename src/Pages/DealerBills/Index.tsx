@@ -788,7 +788,7 @@ const DealerBillsPage: React.FC = () => {
               style={{
                 display: "grid",
                 gridTemplateColumns:
-                  "140px minmax(220px, 1.5fr) 180px 140px 180px",
+                  "80px 140px minmax(220px, 1.5fr) 180px 140px 180px",
                 gap: 16,
                 alignItems: "center",
                 padding: "18px 20px",
@@ -798,6 +798,7 @@ const DealerBillsPage: React.FC = () => {
                 fontSize: 15,
               }}
             >
+              <div>#</div>
               <div>MRP</div>
               <div>Product</div>
               <div>Amount</div>
@@ -823,7 +824,7 @@ const DealerBillsPage: React.FC = () => {
                   style={{
                       display: "grid",
                       gridTemplateColumns:
-                        "140px minmax(220px, 1.5fr) 180px 140px 180px",
+                        "80px 140px minmax(220px, 1.5fr) 180px 140px 180px",
                       gap: 16,
                       alignItems: "center",
                       padding: "18px 20px",
@@ -832,6 +833,9 @@ const DealerBillsPage: React.FC = () => {
                       background: "#fff",
                     }}
                   >
+                    <div style={{ fontSize: 16, fontWeight: 600, color: "#111827" }}>
+                      {index + 1}
+                    </div>
                     <div style={{ fontSize: 16, color: "#111827" }}>
                       {formatCurrency(product.mrp)}
                     </div>
@@ -945,6 +949,7 @@ const DealerBillsPage: React.FC = () => {
                     >
                       <thead>
                         <tr>
+                          <th style={{ textAlign: "left", paddingRight: 8 }}>#</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Product</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Amount</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Qty</th>
@@ -956,6 +961,19 @@ const DealerBillsPage: React.FC = () => {
                         {fields.map((field, index) => {
                           return (
                             <tr key={field.key}>
+                              <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 50 }}>
+                                <div
+                                  style={{
+                                    height: 48,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    fontWeight: 600,
+                                    fontSize: 16,
+                                  }}
+                                >
+                                  {index + 1}
+                                </div>
+                              </td>
                               <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 260 }}>
                                 <Form.Item
                                   name={[field.name, "productName"]}
@@ -1179,6 +1197,13 @@ const DealerBillsPage: React.FC = () => {
                   locale={{ emptyText: "No bill items found" }}
                   scroll={{ x: "max-content" }}
                   columns={[
+                    {
+                      title: "#",
+                      key: "sequence",
+                      width: 70,
+                      align: "center",
+                      render: (_, __, index) => index + 1,
+                    },
                     {
                       title: "MRP",
                       key: "mrp",
