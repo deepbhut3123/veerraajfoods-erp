@@ -1,20 +1,38 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Drawer, Layout, Menu } from "antd";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import type { MenuProps } from "antd";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
+  AppstoreOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   FileTextOutlined,
   ShopOutlined,
   SnippetsOutlined,
+  TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-// import { AuthContext } from "../Auth/AuthContext";
 import "../MasterLayout/Master.css";
 
 const { Sider } = Layout;
 
-const MENU_ITEMS = [
+type MenuLeafItem = {
+  key: string;
+  icon: React.ReactNode;
+  text: string;
+  link: string;
+};
+
+type MenuGroupItem = {
+  key: string;
+  icon: React.ReactNode;
+  text: string;
+  children: MenuLeafItem[];
+};
+
+type SidebarMenuItem = MenuLeafItem | MenuGroupItem;
+
+const MENU_ITEMS: SidebarMenuItem[] = [
   {
     key: "dashboard",
     icon: <DashboardOutlined style={{ color: "inherit" }} />,
@@ -22,28 +40,60 @@ const MENU_ITEMS = [
     link: "/dashboard",
   },
   {
-    key: "routes",
-    icon: <SnippetsOutlined style={{ color: "inherit" }} />,
-    text: "Routes",
-    link: "/routes",
-  },
-  {
-    key: "shops",
+    key: "retailer-group",
     icon: <ShopOutlined style={{ color: "inherit" }} />,
-    text: "Shops",
-    link: "/shops",
+    text: "Retailer",
+    children: [
+      {
+        key: "routes",
+        icon: <SnippetsOutlined style={{ color: "inherit" }} />,
+        text: "Routes",
+        link: "/routes",
+      },
+      {
+        key: "shops",
+        icon: <ShopOutlined style={{ color: "inherit" }} />,
+        text: "Shops",
+        link: "/shops",
+      },
+      {
+        key: "bills",
+        icon: <FileTextOutlined style={{ color: "inherit" }} />,
+        text: "Bills",
+        link: "/bills",
+      },
+      {
+        key: "products",
+        icon: <DatabaseOutlined style={{ color: "inherit" }} />,
+        text: "Products",
+        link: "/products",
+      },
+    ],
   },
   {
-    key: "bills",
-    icon: <FileTextOutlined style={{ color: "inherit" }} />,
-    text: "Bills",
-    link: "/bills",
-  },
-  {
-    key: "products",
-    icon: <DatabaseOutlined style={{ color: "inherit" }} />,
-    text: "Products",
-    link: "/products",
+    key: "dealer-group",
+    icon: <TeamOutlined style={{ color: "inherit" }} />,
+    text: "Dealer",
+    children: [
+      {
+        key: "dealers",
+        icon: <TeamOutlined style={{ color: "inherit" }} />,
+        text: "Dealers",
+        link: "/dealers",
+      },
+      {
+        key: "dealer-products",
+        icon: <AppstoreOutlined style={{ color: "inherit" }} />,
+        text: "Products",
+        link: "/dealer-products",
+      },
+      {
+        key: "dealer-bills",
+        icon: <FileTextOutlined style={{ color: "inherit" }} />,
+        text: "Bills",
+        link: "/dealer-bills",
+      },
+    ],
   },
   {
     key: "users",
@@ -52,6 +102,22 @@ const MENU_ITEMS = [
     link: "/users",
   },
 ];
+
+const isMenuGroup = (item: SidebarMenuItem): item is MenuGroupItem =>
+  "children" in item;
+
+const getFlatMenuItems = (items: SidebarMenuItem[]) =>
+  items.flatMap((item) => (isMenuGroup(item) ? item.children : item));
+
+const FLAT_MENU_ITEMS = getFlatMenuItems(MENU_ITEMS);
+
+const getParentKeyByChildKey = (childKey: string) => {
+  const parent = MENU_ITEMS.find(
+    (item) => isMenuGroup(item) && item.children.some((child) => child.key === childKey),
+  );
+
+  return parent?.key;
+};
 
 interface SidebarProps {
   collapsed: boolean;
@@ -80,35 +146,39 @@ const Sidebar: React.FC<SidebarProps> = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [isHovering, setIsHovering] = useState(false);
-  const [activeMenuItemKey, setActiveMenuItemKey] = useState<string | null>(
-    null
-  );
+  const [activeMenuItemKey, setActiveMenuItemKey] = useState<string | null>(null);
   const [, setHoverEffectActive] = useState(true);
-  const [, setOpenKeys] = useState<string[]>([]);
+  const [openKeys, setOpenKeys] = useState<string[]>([]);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
   const siderRef = useRef<HTMLDivElement>(null);
-  //   const { authData } = useContext(AuthContext);
 
   useEffect(() => {
-    const currentItem = MENU_ITEMS.find(
+    const currentItem = FLAT_MENU_ITEMS.find(
       (item) =>
         location.pathname === item.link ||
-        (item.link && location.pathname.startsWith(item.link + "/"))
+        (item.link && location.pathname.startsWith(`${item.link}/`)),
     );
+
     if (currentItem) {
       setActiveMenuItemKey(currentItem.key);
+      const parentKey = getParentKeyByChildKey(currentItem.key);
+      setOpenKeys(parentKey ? [parentKey] : []);
     } else {
       setActiveMenuItemKey(null);
+      setOpenKeys([]);
     }
   }, [location.pathname]);
 
   useEffect(() => {
     const routeTitles: Record<string, string> = {
       "/dashboard": "Dashboard",
-      "/routes": "Routes",
-      "/shops": "Shops",
-      "/bills": "Bills",
-      "/products": "Products",
+      "/routes": "Retailer Routes",
+      "/shops": "Retailer Shops",
+      "/bills": "Retailer Bills",
+      "/products": "Retailer Products",
+      "/dealers": "Dealers",
+      "/dealer-products": "Dealer Products",
+      "/dealer-bills": "Dealer Bills",
       "/users": "Users",
     };
 
@@ -136,25 +206,111 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (collapsed) {
       const timeout = setTimeout(() => {
         setHoverEffectActive(true);
-        setOpenKeys([]);
+        setOpenKeys(activeMenuItemKey ? [getParentKeyByChildKey(activeMenuItemKey) || ""] : []);
       }, 300);
       setHoverTimeout(timeout);
     }
   };
 
-  const handleMenuItemClick = (key: string) => {
-    const item = MENU_ITEMS.find((item) => item.key === key);
-    if (item) {
-      setActiveMenuItemKey(item.key);
-      navigate(item.link);
-      onItemClick?.();
-      if (isSmallScreen) setCollapsed(true);
+  const handleMenuItemClick: MenuProps["onClick"] = ({ key }) => {
+    const item = FLAT_MENU_ITEMS.find((menuItem) => menuItem.key === key);
+
+    if (!item) {
+      return;
     }
+
+    setActiveMenuItemKey(item.key);
+    navigate(item.link);
+    onItemClick?.();
+    if (isSmallScreen) setCollapsed(true);
   };
 
   const toggleCollapse = () => {
     onCollapse(!collapsed);
   };
+
+  const menuItems: MenuProps["items"] = useMemo(
+    () =>
+      MENU_ITEMS.map((item) => {
+        if (isMenuGroup(item)) {
+          return {
+            key: item.key,
+            icon: (
+              <span style={{ fontSize: "20px", color: DEFAULT_ICON_COLOR }}>
+                {item.icon}
+              </span>
+            ),
+            label: (
+              <span style={{ color: DEFAULT_TEXT_COLOR, fontWeight: 600 }}>
+                {item.text}
+              </span>
+            ),
+            children: item.children.map((child) => ({
+              key: child.key,
+              icon: (
+                <span
+                  style={{
+                    fontSize: "20px",
+                    color:
+                      activeMenuItemKey === child.key
+                        ? ACTIVE_LIGHT_COLOR
+                        : DEFAULT_ICON_COLOR,
+                  }}
+                >
+                  {child.icon}
+                </span>
+              ),
+              label: (
+                <span
+                  style={{
+                    color:
+                      activeMenuItemKey === child.key
+                        ? ACTIVE_LIGHT_COLOR
+                        : DEFAULT_TEXT_COLOR,
+                    fontWeight: 500,
+                  }}
+                >
+                  {child.text}
+                </span>
+              ),
+            })),
+          };
+        }
+
+        return {
+          key: item.key,
+          icon: (
+            <span
+              style={{
+                fontSize: "20px",
+                color:
+                  activeMenuItemKey === item.key
+                    ? ACTIVE_LIGHT_COLOR
+                    : DEFAULT_ICON_COLOR,
+              }}
+            >
+              {item.icon}
+            </span>
+          ),
+          label: (
+            <span
+              style={{
+                color:
+                  activeMenuItemKey === item.key
+                    ? ACTIVE_LIGHT_COLOR
+                    : DEFAULT_TEXT_COLOR,
+                fontWeight: 500,
+              }}
+            >
+              {item.text}
+            </span>
+          ),
+        };
+      }),
+    [ACTIVE_LIGHT_COLOR, DEFAULT_ICON_COLOR, DEFAULT_TEXT_COLOR, activeMenuItemKey],
+  );
+
+  const normalizedOpenKeys = openKeys.filter(Boolean);
 
   return (
     <>
@@ -186,23 +342,12 @@ const Sidebar: React.FC<SidebarProps> = ({
             mode="inline"
             theme="dark"
             selectedKeys={[activeMenuItemKey || ""]}
+            openKeys={normalizedOpenKeys}
+            onOpenChange={(keys) => setOpenKeys(keys as string[])}
+            onClick={handleMenuItemClick}
             style={{ color: "white", width: "100%" }}
-          >
-            {MENU_ITEMS.map((item) => (
-              <Menu.Item
-                key={item.key}
-                icon={<span style={{ fontSize: "24px" }}>{item.icon}</span>}
-                onClick={() => handleMenuItemClick(item.key)}
-              >
-                <Link
-                  to={item.link}
-                  style={{ textDecoration: "none", color: "inherit" }}
-                >
-                  {item.text}
-                </Link>
-              </Menu.Item>
-            ))}
-          </Menu>
+            items={menuItems}
+          />
         </Drawer>
       ) : (
         <Sider
@@ -211,7 +356,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           collapsible
           collapsed={collapsed && !(!disableHover && isHovering)}
           collapsedWidth={80}
-          width={200}
+          width={220}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           style={{
@@ -246,41 +391,14 @@ const Sidebar: React.FC<SidebarProps> = ({
           <Menu
             mode="inline"
             selectedKeys={[activeMenuItemKey || ""]}
+            openKeys={normalizedOpenKeys}
+            onOpenChange={(keys) => setOpenKeys(keys as string[])}
+            onClick={handleMenuItemClick}
             style={{
-              backgroundColor: "transparent", // let gradient show
+              backgroundColor: "transparent",
               borderRight: "none",
             }}
-            items={MENU_ITEMS.map((item) => ({
-              key: item.key,
-              icon: (
-                <span
-                  style={{
-                    fontSize: "20px",
-                    color:
-                      activeMenuItemKey === item.key
-                        ? ACTIVE_LIGHT_COLOR
-                        : DEFAULT_ICON_COLOR,
-                  }}
-                >
-                  {item.icon}
-                </span>
-              ),
-              label: (
-                <Link
-                  to={item.link}
-                  style={{
-                    textDecoration: "none",
-                    color:
-                      activeMenuItemKey === item.key
-                        ? ACTIVE_LIGHT_COLOR
-                        : DEFAULT_TEXT_COLOR,
-                    fontWeight: 500,
-                  }}
-                >
-                  {item.text}
-                </Link>
-              ),
-            }))}
+            items={menuItems}
           />
         </Sider>
       )}
