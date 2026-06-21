@@ -1,57 +1,60 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Card, Col, Empty, Row, Select, Space, Spin, Typography } from "antd";
+import dayjs, { type Dayjs } from "dayjs";
+import { Alert, Card, Col, DatePicker, Empty, Row, Select, Space, Spin, Table, Tag, Typography } from "antd";
+import type { ColumnsType } from "antd/es/table";
+import { FiBox, FiMapPin, FiShoppingBag, FiUsers } from "react-icons/fi";
 import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { getAdminDashboardSummary, getAllAdminBills } from "../Utils/Api";
+  getAdminDashboardSummary,
+  getAllAdminBills,
+  getAllDealers,
+  getAllDealerBills,
+} from "../Utils/Api";
 
 const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
 
-type ShippedUserSummary = {
-  _id: string;
-  name: string;
-  email: string;
-  roleId: number;
-  isActive: boolean;
-  shippedBillsCount: number;
+const SURFACE = {
+  page:
+    "radial-gradient(circle at top left, rgba(13, 148, 136, 0.14) 0%, rgba(13, 148, 136, 0) 32%), radial-gradient(circle at top right, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0) 28%), linear-gradient(180deg, #f4fbfa 0%, #eef5fb 48%, #f8fafc 100%)",
+  panel: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)",
+  border: "1px solid rgba(148, 163, 184, 0.14)",
+  shadow: "0 20px 45px rgba(15, 23, 42, 0.08)",
 };
 
-type ShippedAmountPoint = {
-  date?: string;
-  label?: string;
-  amount?: number;
-  totalAmount?: number;
-  price?: number;
-  value?: number;
-  userId?: string;
-  userName?: string;
-  name?: string;
-};
+const TOP_CARD_STYLES = [
+  {
+    background:
+      "linear-gradient(135deg, rgba(15, 118, 110, 0.95) 0%, rgba(34, 211, 193, 0.78) 100%)",
+    glow: "rgba(45, 212, 191, 0.38)",
+  },
+  {
+    background:
+      "linear-gradient(135deg, rgba(37, 99, 235, 0.96) 0%, rgba(56, 189, 248, 0.74) 100%)",
+    glow: "rgba(59, 130, 246, 0.34)",
+  },
+  {
+    background:
+      "linear-gradient(135deg, rgba(8, 145, 178, 0.96) 0%, rgba(45, 212, 191, 0.72) 100%)",
+    glow: "rgba(34, 211, 238, 0.32)",
+  },
+  {
+    background:
+      "linear-gradient(135deg, rgba(37, 99, 235, 0.96) 0%, rgba(99, 102, 241, 0.78) 55%, rgba(139, 92, 246, 0.74) 100%)",
+    glow: "rgba(129, 140, 248, 0.34)",
+  },
+] as const;
 
 type DashboardSummary = {
   routesCount: number;
   shopsCount: number;
   productsCount: number;
-  shippedBillsCount: number;
-  selectedMonth: number;
-  selectedYear: number;
-  availableYears: number[];
-  monthlyShippedByUser: ShippedUserSummary[];
-  totalShippedAmount?: number;
-  shippedBillsAmount?: number;
-  shippedAmountTotal?: number;
-  shippedAmountByDate?: ShippedAmountPoint[];
-  shippedBillsTrend?: ShippedAmountPoint[];
-  dailyShippedAmount?: ShippedAmountPoint[];
+  dealersCount?: number;
+  completedBillsCount?: number;
+  completeBillsCount?: number;
+  availableYears?: number[];
 };
 
-type BillItem = {
+type RetailerBillItem = {
   _id?: string;
   id?: string;
   amount?: number;
@@ -62,19 +65,43 @@ type BillItem = {
   status?: string;
   createdAt?: string;
   updatedAt?: string;
-  userId?: {
+  shopId?: {
     _id?: string;
-    name?: string;
-    email?: string;
+    shopName?: string;
+    shopAddress?: string;
+    mobileNumber?: string;
+  };
+  routeId?: {
+    _id?: string;
+    routeName?: string;
+    cityName?: string;
   };
 };
 
-type ChartPoint = {
+type DealerBillItem = {
+  _id?: string;
+  billDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  totalAmount?: number;
+  dealerId?: {
+    _id?: string;
+    dealerName?: string;
+    city?: string;
+    contactNo?: string;
+  };
+};
+
+type RankingRow = {
   key: string;
-  rawDate: string;
-  dateLabel: string;
+  rank: number;
+  name: string;
+  city: string;
+  count: number;
   amount: number;
 };
+
+type DateRangeValue = [Dayjs | null, Dayjs | null] | null;
 
 const monthOptions = [
   { value: 1, label: "January" },
@@ -91,19 +118,21 @@ const monthOptions = [
   { value: 12, label: "December" },
 ];
 
-const currentDate = new Date();
-
-const emptySummary: DashboardSummary = {
+const now = dayjs();
+const defaultSummary: DashboardSummary = {
   routesCount: 0,
   shopsCount: 0,
   productsCount: 0,
-  shippedBillsCount: 0,
-  selectedMonth: currentDate.getMonth() + 1,
-  selectedYear: currentDate.getFullYear(),
-  availableYears: [currentDate.getFullYear()],
-  monthlyShippedByUser: [],
-  shippedAmountByDate: [],
+  completedBillsCount: 0,
+  availableYears: [now.year()],
 };
+
+const normalizeStatus = (status?: string) => status?.trim().toLowerCase() || "unknown";
+
+const isCompletedStatus = (status?: string) =>
+  ["complete", "completed", "order complete", "order completed", "settled"].includes(
+    normalizeStatus(status),
+  );
 
 const formatCurrency = (value?: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -111,6 +140,14 @@ const formatCurrency = (value?: number) =>
     currency: "INR",
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
+
+const formatRoundedCurrency = (value?: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(Number(value || 0)));
 
 const formatCompactCurrency = (value?: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -120,25 +157,7 @@ const formatCompactCurrency = (value?: number) =>
     maximumFractionDigits: 1,
   }).format(Number(value || 0));
 
-const formatChartDate = (value?: string) => {
-  if (!value) return "-";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-  }).format(date);
-};
-
-const normalizeStatus = (status?: string) => status?.trim().toLowerCase() || "unknown";
-
-const isShippedStatus = (status?: string) => normalizeStatus(status) === "shipped";
-
-const getBillAmount = (record: BillItem) =>
+const getRetailerAmount = (record: RetailerBillItem) =>
   Number(
     record.amount ??
       record.billAmount ??
@@ -148,12 +167,314 @@ const getBillAmount = (record: BillItem) =>
       0,
   );
 
+const getDealerAmount = (record: DealerBillItem) => Number(record.totalAmount ?? 0);
+
+const toDate = (value?: string) => {
+  if (!value) return null;
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed : null;
+};
+
+const isWithinFilter = (
+  value: Dayjs | null,
+  selectedMonth: number,
+  selectedYear: number,
+  selectedDateRange: DateRangeValue,
+) => {
+  if (!value) return false;
+
+  if (selectedDateRange?.[0] && selectedDateRange?.[1]) {
+    return (
+      (value.isAfter(selectedDateRange[0], "day") || value.isSame(selectedDateRange[0], "day")) &&
+      (value.isBefore(selectedDateRange[1], "day") || value.isSame(selectedDateRange[1], "day"))
+    );
+  }
+
+  return value.month() + 1 === selectedMonth && value.year() === selectedYear;
+};
+
+const buildRanking = <T,>(
+  records: T[],
+  getKey: (record: T) => string | undefined,
+  getName: (record: T) => string,
+  getCity: (record: T) => string,
+  getAmount: (record: T) => number,
+) => {
+  const rankingMap = new Map<string, Omit<RankingRow, "rank">>();
+
+  records.forEach((record) => {
+    const key = getKey(record);
+    if (!key) return;
+
+    const current = rankingMap.get(key) || {
+      key,
+      name: getName(record),
+      city: getCity(record),
+      count: 0,
+      amount: 0,
+    };
+
+    current.count += 1;
+    current.amount += getAmount(record);
+    if (!current.name || current.name === "-") {
+      current.name = getName(record);
+    }
+    if (!current.city || current.city === "-") {
+      current.city = getCity(record);
+    }
+
+    rankingMap.set(key, current);
+  });
+
+  return Array.from(rankingMap.values())
+    .sort((a, b) => {
+      if (b.amount !== a.amount) return b.amount - a.amount;
+      return b.count - a.count;
+    })
+    .slice(0, 10)
+    .map((item, index) => ({
+      ...item,
+      rank: index + 1,
+    }));
+};
+
+const getLeadingEntry = (rows: RankingRow[]) => rows[0]?.name || "No leader yet";
+
+type RankingSectionHeaderProps = {
+  selectedMonth: number;
+  selectedYear: number;
+  selectedDateRange: DateRangeValue;
+  monthOptions: Array<{ value: number; label: string }>;
+  yearOptions: Array<{ value: number; label: string }>;
+  onMonthChange: (value: number) => void;
+  onYearChange: (value: number) => void;
+  onDateRangeChange: (value: DateRangeValue) => void;
+};
+
+type RankingPanelProps = {
+  title: string;
+  subtitle: string;
+  countLabel: string;
+  countValue: number;
+  amountValue: number;
+  amountTone: string;
+  countTone: string;
+  data: RankingRow[];
+  columns: ColumnsType<RankingRow>;
+  emptyText: string;
+  borderColor: string;
+  background: string;
+};
+
+const RankingSectionHeader: React.FC<RankingSectionHeaderProps> = ({
+  selectedMonth,
+  selectedYear,
+  selectedDateRange,
+  monthOptions,
+  yearOptions,
+  onMonthChange,
+  onYearChange,
+  onDateRangeChange,
+}) => (
+  <Card
+    bordered={false}
+    style={{
+      borderRadius: 18,
+      border: "1px solid rgba(148, 163, 184, 0.12)",
+      boxShadow: "0 10px 24px rgba(15, 23, 42, 0.04)",
+      background:
+        "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(240,249,255,0.96) 45%, rgba(236,253,245,0.96) 100%)",
+      overflow: "hidden",
+    }}
+    bodyStyle={{ padding: 14 }}
+  >
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background:
+          "radial-gradient(circle at top right, rgba(56, 189, 248, 0.12) 0%, rgba(56, 189, 248, 0) 30%), radial-gradient(circle at bottom left, rgba(20, 184, 166, 0.12) 0%, rgba(20, 184, 166, 0) 28%)",
+        pointerEvents: "none",
+      }}
+    />
+    <Row
+      gutter={[12, 12]}
+      style={{
+        width: "100%",
+        position: "relative",
+        zIndex: 1,
+      }}
+      align="middle"
+    >
+      <Col xs={24} xl={7}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <Text
+            style={{
+              color: "#0f766e",
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: 0.9,
+              textTransform: "uppercase",
+            }}
+          >
+            Performance Filters
+          </Text>
+          <Title level={5} style={{ margin: 0, color: "#0f172a", fontSize: 20 }}>
+            Top 10 Rankings
+          </Title>
+          <Text style={{ color: "#475569", fontSize: 12 }}>
+            Switch the period to compare leaderboards by value and order activity.
+          </Text>
+        </div>
+      </Col>
+      <Col xs={24} xl={17}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+            gap: 10,
+          }}
+        >
+          <Select
+            size="small"
+            value={selectedMonth}
+            onChange={onMonthChange}
+            options={monthOptions}
+          />
+          <Select
+            size="small"
+            value={selectedYear}
+            onChange={onYearChange}
+            options={yearOptions}
+          />
+          <RangePicker
+            size="small"
+            value={selectedDateRange}
+            onChange={(value) => onDateRangeChange(value)}
+            format="DD-MM-YYYY"
+            allowClear
+            style={{ width: "100%" }}
+          />
+        </div>
+      </Col>
+    </Row>
+  </Card>
+);
+
+const RankingPanel: React.FC<RankingPanelProps> = ({
+  title,
+  subtitle,
+  countLabel,
+  countValue,
+  amountValue,
+  amountTone,
+  countTone,
+  data,
+  columns,
+  emptyText,
+  borderColor,
+  background,
+}) => (
+  <Card
+    bordered={false}
+    style={{
+      borderRadius: 18,
+      border: borderColor,
+      boxShadow: "0 10px 24px rgba(15, 23, 42, 0.05)",
+      background,
+      overflow: "hidden",
+    }}
+    bodyStyle={{ padding: 0 }}
+  >
+    <div
+      style={{
+        padding: 14,
+        borderBottom: "1px solid rgba(226, 232, 240, 0.9)",
+        background:
+          countTone === "green"
+            ? "linear-gradient(135deg, rgba(236,253,245,0.95) 0%, rgba(240,249,255,0.95) 100%)"
+            : "linear-gradient(135deg, rgba(239,246,255,0.96) 0%, rgba(250,245,255,0.96) 100%)",
+      }}
+    >
+      <Row gutter={[12, 12]} align="middle">
+        <Col flex="auto">
+          <div style={{ display: "grid", gap: 4 }}>
+            <Title level={5} style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>
+              {title}
+            </Title>
+            <Text style={{ color: "#64748b", fontSize: 12 }}>{subtitle}</Text>
+          </div>
+        </Col>
+        <Col>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(96px, auto))",
+              gap: 8,
+            }}
+          >
+            <div
+              style={{
+                padding: "8px 10px",
+                borderRadius: 14,
+                background: "#ffffff",
+                border: "1px solid rgba(148, 163, 184, 0.14)",
+                minWidth: 102,
+              }}
+            >
+              <Text style={{ fontSize: 10, color: "#64748b" }}>Volume</Text>
+              <div style={{ marginTop: 2, fontWeight: 800, color: "#0f172a", fontSize: 16 }}>
+                {countValue}
+              </div>
+              <Text style={{ fontSize: 10, color: "#64748b" }}>{countLabel}</Text>
+            </div>
+            <div
+              style={{
+                padding: "8px 10px",
+                borderRadius: 14,
+                background: "#ffffff",
+                border: "1px solid rgba(148, 163, 184, 0.14)",
+                minWidth: 102,
+              }}
+            >
+              <Text style={{ fontSize: 10, color: "#64748b" }}>Amount</Text>
+              <div style={{ marginTop: 2, fontWeight: 800, color: "#0f172a", fontSize: 16 }}>
+                {formatRoundedCurrency(amountValue)}
+              </div>
+              <Tag color={amountTone} style={{ margin: "4px 0 0", borderRadius: 999, fontSize: 10 }}>
+                live total
+              </Tag>
+            </div>
+          </div>
+        </Col>
+      </Row>
+    </div>
+
+    <div style={{ padding: 10 }}>
+      <Table
+        rowKey="key"
+        dataSource={data}
+        columns={columns}
+        pagination={false}
+        size="middle"
+        rowClassName={() => "dashboard-ranking-row"}
+        locale={{
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />,
+        }}
+        style={{ overflow: "hidden" }}
+      />
+    </div>
+  </Card>
+);
+
 const Dashboard: React.FC = () => {
-  const [summary, setSummary] = useState<DashboardSummary>(emptySummary);
-  const [allBills, setAllBills] = useState<BillItem[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState(emptySummary.selectedMonth);
-  const [selectedYear, setSelectedYear] = useState(emptySummary.selectedYear);
-  const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined);
+  const [summary, setSummary] = useState<DashboardSummary>(defaultSummary);
+  const [retailerBills, setRetailerBills] = useState<RetailerBillItem[]>([]);
+  const [dealerBills, setDealerBills] = useState<DealerBillItem[]>([]);
+  const [allDealersCount, setAllDealersCount] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState(now.month() + 1);
+  const [selectedYear, setSelectedYear] = useState(now.year());
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRangeValue>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -162,24 +483,45 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       setError("");
 
+      const fromDate =
+        selectedDateRange?.[0] && selectedDateRange?.[1]
+          ? selectedDateRange[0].format("YYYY-MM-DD")
+          : undefined;
+      const toDate =
+        selectedDateRange?.[0] && selectedDateRange?.[1]
+          ? selectedDateRange[1].format("YYYY-MM-DD")
+          : undefined;
+
       try {
-        const [summaryRes, billsRes] = await Promise.all([
+        const [summaryRes, retailerRes, dealerRes, dealersRes] = await Promise.all([
           getAdminDashboardSummary({
             month: selectedMonth,
             year: selectedYear,
-            userId: selectedUserId,
+            fromDate,
+            toDate,
           }),
-          getAllAdminBills(),
+          getAllAdminBills({
+            month: selectedMonth,
+            year: selectedYear,
+            fromDate,
+            toDate,
+          }),
+          getAllDealerBills({
+            month: selectedMonth,
+            year: selectedYear,
+            fromDate,
+            toDate,
+          }),
+          getAllDealers(),
         ]);
 
-        const nextSummary = summaryRes?.data || emptySummary;
-        const nextBills = billsRes?.data || [];
-
         setSummary({
-          ...emptySummary,
-          ...nextSummary,
+          ...defaultSummary,
+          ...(summaryRes?.data || {}),
         });
-        setAllBills(Array.isArray(nextBills) ? nextBills : []);
+        setRetailerBills(Array.isArray(retailerRes?.data) ? retailerRes.data : []);
+        setDealerBills(Array.isArray(dealerRes?.data) ? dealerRes.data : []);
+        setAllDealersCount(Array.isArray(dealersRes?.data) ? dealersRes.data.length : 0);
       } catch (err: any) {
         setError(
           err?.response?.data?.message ||
@@ -191,21 +533,24 @@ const Dashboard: React.FC = () => {
       }
     };
 
-    loadDashboard();
-  }, [selectedMonth, selectedYear, selectedUserId]);
+    void loadDashboard();
+  }, [selectedDateRange, selectedMonth, selectedYear]);
 
   const yearOptions = useMemo(() => {
-    const yearSet = new Set<number>(
-      summary.availableYears?.length ? summary.availableYears : [selectedYear],
-    );
+    const yearSet = new Set<number>(summary.availableYears?.length ? summary.availableYears : []);
+    yearSet.add(selectedYear);
 
-    allBills.forEach((bill) => {
-      const value = bill.createdAt || bill.updatedAt;
-      if (!value) return;
+    retailerBills.forEach((bill) => {
+      const parsed = toDate(bill.createdAt || bill.updatedAt);
+      if (parsed) {
+        yearSet.add(parsed.year());
+      }
+    });
 
-      const date = new Date(value);
-      if (!Number.isNaN(date.getTime())) {
-        yearSet.add(date.getFullYear());
+    dealerBills.forEach((bill) => {
+      const parsed = toDate(bill.billDate || bill.createdAt || bill.updatedAt);
+      if (parsed) {
+        yearSet.add(parsed.year());
       }
     });
 
@@ -215,335 +560,457 @@ const Dashboard: React.FC = () => {
         value: year,
         label: String(year),
       }));
-  }, [allBills, selectedYear, summary.availableYears]);
+  }, [dealerBills, retailerBills, selectedYear, summary.availableYears]);
 
-  const fallbackFilteredBills = useMemo(() => {
-    return allBills.filter((bill) => {
-      if (!isShippedStatus(bill.status)) {
-        return false;
-      }
-
-      if (selectedUserId && bill.userId?._id !== selectedUserId) {
-        return false;
-      }
-
-      const rawDate = bill.createdAt || bill.updatedAt;
-      if (!rawDate) {
-        return false;
-      }
-
-      const date = new Date(rawDate);
-      if (Number.isNaN(date.getTime())) {
-        return false;
-      }
-
-      return date.getMonth() + 1 === selectedMonth && date.getFullYear() === selectedYear;
-    });
-  }, [allBills, selectedMonth, selectedUserId, selectedYear]);
-
-  const userOptions = useMemo(() => {
-    const optionMap = new Map<string, { value: string; label: string }>();
-
-    summary.monthlyShippedByUser.forEach((user) => {
-      if (user?._id) {
-        optionMap.set(user._id, {
-          value: user._id,
-          label: user.name || user.email || "Unknown User",
-        });
-      }
-    });
-
-    const series =
-      summary.shippedAmountByDate || summary.shippedBillsTrend || summary.dailyShippedAmount || [];
-
-    series.forEach((point) => {
-      if (point?.userId) {
-        optionMap.set(point.userId, {
-          value: point.userId,
-          label: point.userName || point.name || "Unknown User",
-        });
-      }
-    });
-
-    fallbackFilteredBills.forEach((bill) => {
-      const userId = bill.userId?._id;
-      if (userId) {
-        optionMap.set(userId, {
-          value: userId,
-          label: bill.userId?.name || bill.userId?.email || "Unknown User",
-        });
-      }
-    });
-
-    return [{ value: "all", label: "All Users" }, ...Array.from(optionMap.values())];
-  }, [fallbackFilteredBills, summary]);
-
-  const summarySeries = useMemo(() => {
-    const rawSeries =
-      summary.shippedAmountByDate || summary.shippedBillsTrend || summary.dailyShippedAmount || [];
-
-    return rawSeries
-      .filter((point) => {
-        if (!selectedUserId) return true;
-        return point.userId === selectedUserId;
-      })
-      .map((point, index) => {
-        const amount = Number(
-          point.amount ?? point.totalAmount ?? point.price ?? point.value ?? 0,
+  const filteredRetailerBills = useMemo(
+    () =>
+      retailerBills.filter((bill) => {
+        if (!isCompletedStatus(bill.status)) return false;
+        return isWithinFilter(
+          toDate(bill.createdAt || bill.updatedAt),
+          selectedMonth,
+          selectedYear,
+          selectedDateRange,
         );
-        const rawDate = point.date || point.label || `Point ${index + 1}`;
+      }),
+    [retailerBills, selectedDateRange, selectedMonth, selectedYear],
+  );
 
-        return {
-          key: `${rawDate}-${index}`,
-          rawDate,
-          dateLabel: formatChartDate(rawDate),
-          amount,
-        };
-      })
-      .filter((point) => point.amount > 0);
-  }, [selectedUserId, summary]);
+  const filteredDealerBills = useMemo(
+    () =>
+      dealerBills.filter((bill) =>
+        isWithinFilter(
+          toDate(bill.billDate || bill.createdAt || bill.updatedAt),
+          selectedMonth,
+          selectedYear,
+          selectedDateRange,
+        ),
+      ),
+    [dealerBills, selectedDateRange, selectedMonth, selectedYear],
+  );
 
-  const fallbackChartData = useMemo<ChartPoint[]>(() => {
-    return fallbackFilteredBills
-      .map((bill, index) => {
-        const rawDate = bill.createdAt || bill.updatedAt || `Point ${index + 1}`;
+  const completedOrderCount = filteredRetailerBills.length;
+  const completedOrderAmount = filteredRetailerBills.reduce(
+    (sum, bill) => sum + getRetailerAmount(bill),
+    0,
+  );
+  const totalDealersCount = Number(summary.dealersCount ?? allDealersCount ?? 0);
+  const dealerBillCount = filteredDealerBills.length;
+  const dealerBillAmount = filteredDealerBills.reduce((sum, bill) => sum + getDealerAmount(bill), 0);
 
-        return {
-          key: bill._id || bill.id || `${rawDate}-${index}`,
-          rawDate,
-          dateLabel: formatChartDate(rawDate),
-          amount: getBillAmount(bill),
-        };
-      })
-      .sort((a, b) => new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime());
-  }, [fallbackFilteredBills]);
+  const topRetailers = useMemo(
+    () =>
+      buildRanking(
+        filteredRetailerBills,
+        (bill) => bill.shopId?._id,
+        (bill) => bill.shopId?.shopName || "Unknown Retailer",
+        (bill) => bill.routeId?.cityName || bill.shopId?.shopAddress || "-",
+        getRetailerAmount,
+      ),
+    [filteredRetailerBills],
+  );
 
-  const chartData = summarySeries.length ? summarySeries : fallbackChartData;
+  const topDealers = useMemo(
+    () =>
+      buildRanking(
+        filteredDealerBills,
+        (bill) => bill.dealerId?._id,
+        (bill) => bill.dealerId?.dealerName || "Unknown Dealer",
+        (bill) => bill.dealerId?.city || "-",
+        getDealerAmount,
+      ),
+    [filteredDealerBills],
+  );
 
-  const shippedAmountTotal = useMemo(() => {
-    if (!summarySeries.length && fallbackChartData.length) {
-      return fallbackChartData.reduce((total, item) => total + item.amount, 0);
-    }
-
-    const summaryAmount =
-      summary.totalShippedAmount ??
-      summary.shippedBillsAmount ??
-      summary.shippedAmountTotal;
-
-    if (typeof summaryAmount === "number") {
-      return summaryAmount;
-    }
-
-    if (summarySeries.length) {
-      return summarySeries.reduce((total, item) => total + item.amount, 0);
-    }
-
-    return 0;
-  }, [fallbackChartData, summary, summarySeries]);
-
-  const shippedBillsCount = useMemo(() => {
-    if (!summarySeries.length && fallbackFilteredBills.length) {
-      return fallbackFilteredBills.length;
-    }
-
-    return Number(summary.shippedBillsCount || 0);
-  }, [fallbackFilteredBills.length, summary.shippedBillsCount, summarySeries.length]);
+  const rankingColumns = (entityLabel: string, countLabel: string): ColumnsType<RankingRow> => [
+    {
+      title: "Rank",
+      dataIndex: "rank",
+      key: "rank",
+      width: 80,
+      align: "center",
+      render: (value: number) => (
+        <Tag
+          color={value <= 3 ? "gold" : "default"}
+          style={{
+            margin: 0,
+            borderRadius: 999,
+            minWidth: 44,
+            textAlign: "center",
+            fontWeight: 700,
+          }}
+        >
+          #{value}
+        </Tag>
+      ),
+    },
+    {
+      title: entityLabel,
+      dataIndex: "name",
+      key: "name",
+      render: (_, record) => (
+        <div style={{ display: "grid", gap: 2 }}>
+          <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 15 }}>{record.name}</div>
+          <Text style={{ color: "#64748b", fontSize: 12 }}>{record.city}</Text>
+        </div>
+      ),
+    },
+    {
+      title: countLabel,
+      dataIndex: "count",
+      key: "count",
+      width: 130,
+      align: "center",
+      render: (value: number) => (
+        <Tag
+          color="blue"
+          style={{ margin: 0, borderRadius: 999, minWidth: 40, textAlign: "center" }}
+        >
+          {value}
+        </Tag>
+      ),
+    },
+    {
+      title: "Amount",
+      dataIndex: "amount",
+      key: "amount",
+      width: 160,
+      align: "right",
+      render: (value: number) => (
+        <Text strong style={{ fontSize: 15, color: "#0f172a" }}>
+          {formatRoundedCurrency(value)}
+        </Text>
+      ),
+    },
+  ];
 
   const cards = [
     {
       label: "All Routes",
       value: summary.routesCount,
       color: "#0f766e",
-      background: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)",
       helper: "Registered routes",
+      accent: "rgba(16, 185, 129, 0.18)",
+      background: "linear-gradient(135deg, rgba(236, 253, 245, 0.88) 0%, rgba(209, 250, 229, 0.72) 100%)",
+      icon: FiMapPin,
     },
     {
       label: "All Shops",
       value: summary.shopsCount,
       color: "#1d4ed8",
-      background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
-      helper: "Active shops",
+      helper: "Active retailers",
+      accent: "rgba(59, 130, 246, 0.18)",
+      background: "linear-gradient(135deg, rgba(239, 246, 255, 0.88) 0%, rgba(219, 234, 254, 0.72) 100%)",
+      icon: FiShoppingBag,
     },
     {
       label: "All Products",
       value: summary.productsCount,
       color: "#b45309",
-      background: "linear-gradient(135deg, #fffbeb 0%, #fde68a 100%)",
       helper: "Available products",
+      accent: "rgba(245, 158, 11, 0.18)",
+      background: "linear-gradient(135deg, rgba(255, 251, 235, 0.9) 0%, rgba(253, 230, 138, 0.72) 100%)",
+      icon: FiBox,
     },
     {
-      label: "Shipped Bill Total",
-      value: formatCompactCurrency(shippedAmountTotal),
-      color: "#6d28d9",
-      background: "linear-gradient(135deg, #f5f3ff 0%, #ddd6fe 100%)",
-      helper: `${shippedBillsCount} shipped bills`,
+      label: "All Dealers",
+      value: totalDealersCount,
+      color: "#7c2d12",
+      helper: "Registered dealers",
+      accent: "rgba(249, 115, 22, 0.18)",
+      background: "linear-gradient(135deg, rgba(255, 247, 237, 0.9) 0%, rgba(254, 215, 170, 0.72) 100%)",
+      icon: FiUsers,
     },
   ];
+
+  const selectedPeriodLabel =
+    selectedDateRange?.[0] && selectedDateRange?.[1]
+      ? `${selectedDateRange[0].format("DD MMM YYYY")} - ${selectedDateRange[1].format("DD MMM YYYY")}`
+      : `${monthOptions.find((option) => option.value === selectedMonth)?.label || "Month"} ${selectedYear}`;
 
   return (
     <div
       style={{
         height: "calc(100vh - 50px)",
         overflowY: "auto",
-        padding: 20,
-        background:
-          "linear-gradient(180deg, #f6fbfb 0%, #eef6f5 45%, #f8fafc 100%)",
+        padding: 16,
+        background: SURFACE.page,
       }}
     >
       <Card
         bordered={false}
         style={{
-          borderRadius: 18,
-          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
+          borderRadius: 24,
+          boxShadow: SURFACE.shadow,
+          background: SURFACE.panel,
         }}
-        bodyStyle={{ padding: 24 }}
+        bodyStyle={{ padding: 18 }}
       >
-        <div style={{ marginBottom: 24 }}>
-          <Title level={3} style={{ margin: 0 }}>
-            Admin Dashboard
-          </Title>
-        </div>
-
-        {loading ? (
-          <div style={{ minHeight: 240, display: "grid", placeItems: "center" }}>
-            <Spin size="large" />
-          </div>
-        ) : error ? (
-          <Alert type="error" showIcon message={error} />
-        ) : (
-          <Space direction="vertical" size={20} style={{ width: "100%" }}>
-            <Row gutter={[16, 16]}>
-              {cards.map((card) => (
-                <Col key={card.label} xs={24} sm={12} xl={6}>
-                  <Card
-                    bordered={false}
-                    style={{
-                      borderRadius: 16,
-                      background: card.background,
-                      minHeight: 160,
-                      boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
-                    }}
-                  >
-                    <Text style={{ color: card.color, fontWeight: 600 }}>
-                      {card.label}
-                    </Text>
-                    <div
-                      style={{
-                        fontSize: card.label === "Shipped Bill Total" ? 36 : 44,
-                        lineHeight: 1.1,
-                        fontWeight: 800,
-                        marginTop: 12,
-                        color: "#0f172a",
-                      }}
-                    >
-                      {card.value}
-                    </div>
-                    <Text style={{ color: "#5b6472", fontSize: 13 }}>{card.helper}</Text>
-                  </Card>
-                </Col>
-              ))}
-            </Row>
-
-            <Card
-              bordered={false}
+        <Space direction="vertical" size={16} style={{ width: "100%" }}>
+          <div
+            style={{
+              position: "relative",
+              overflow: "hidden",
+              borderRadius: 20,
+              padding: 18,
+              background:
+                "linear-gradient(135deg, rgba(6, 95, 70, 0.98) 0%, rgba(13, 148, 136, 0.92) 52%, rgba(30, 64, 175, 0.88) 100%)",
+              boxShadow: "0 22px 40px rgba(15, 23, 42, 0.14)",
+            }}
+          >
+            <div
               style={{
-                borderRadius: 16,
-                border: "1px solid rgba(0, 105, 92, 0.08)",
-                boxShadow: "0 8px 24px rgba(15, 23, 42, 0.04)",
+                position: "absolute",
+                top: -80,
+                right: -30,
+                width: 220,
+                height: 220,
+                borderRadius: "50%",
+                background: "rgba(255,255,255,0.08)",
               }}
-              bodyStyle={{ padding: 20 }}
-            >
-              <Space direction="vertical" size={18} style={{ width: "100%" }}>
-                <Space
-                  align="start"
-                  style={{
-                    width: "100%",
-                    justifyContent: "space-between",
-                    gap: 16,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div>
-                    <Title level={4} style={{ margin: 0, color: "#0f172a" }}>
-                      Shipped Bill Price Graph
-                    </Title>
-                    <Text style={{ color: "#64748b" }}>
-                      X-axis shows date and Y-axis shows amount
-                    </Text>
-                  </div>
-
-                  <Space wrap>
-                    <Select
-                      value={selectedMonth}
-                      onChange={setSelectedMonth}
-                      options={monthOptions}
-                      style={{ minWidth: 150 }}
-                    />
-                    <Select
-                      value={selectedYear}
-                      onChange={setSelectedYear}
-                      options={yearOptions}
-                      style={{ minWidth: 120 }}
-                    />
-                    <Select
-                      value={selectedUserId || "all"}
-                      onChange={(value) => setSelectedUserId(value === "all" ? undefined : value)}
-                      options={userOptions}
-                      style={{ minWidth: 180 }}
-                    />
-                  </Space>
-                </Space>
-
+            />
+            <div
+              style={{
+                position: "absolute",
+                bottom: -60,
+                left: -20,
+                width: 180,
+                height: 180,
+                borderRadius: "50%",
+                background: "rgba(255,255,255,0.08)",
+              }}
+            />
+            <Row gutter={[14, 14]} align="stretch">
+              <Col xs={24} xl={11}>
                 <div
                   style={{
-                    height: 340,
-                    borderRadius: 16,
+                    position: "relative",
+                    zIndex: 1,
+                    height: "100%",
+                    minHeight: 250,
+                    borderRadius: 24,
+                    padding: 24,
+                    border: "1px solid rgba(255,255,255,0.34)",
                     background:
-                      "linear-gradient(180deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.9) 100%)",
-                    border: "1px solid rgba(148, 163, 184, 0.18)",
-                    padding: 16,
+                      "linear-gradient(180deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.04) 100%)",
+                    boxShadow:
+                      "inset 0 1px 0 rgba(255,255,255,0.28), 0 16px 34px rgba(15, 23, 42, 0.12)",
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
                   }}
                 >
-                  {chartData.length ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#dbe3ea" />
-                        <XAxis dataKey="dateLabel" tick={{ fill: "#64748b", fontSize: 12 }} />
-                        <YAxis
-                          tick={{ fill: "#64748b", fontSize: 12 }}
-                          tickFormatter={(value) => formatCompactCurrency(Number(value))}
-                        />
-                        <Tooltip
-                          formatter={(value) => formatCurrency(Number(value))}
-                          labelStyle={{ color: "#0f172a", fontWeight: 600 }}
-                          contentStyle={{
-                            borderRadius: 12,
-                            border: "1px solid rgba(148, 163, 184, 0.2)",
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: -120,
+                      right: -20,
+                      width: 220,
+                      height: 220,
+                      borderRadius: "50%",
+                      background: "rgba(45, 212, 191, 0.12)",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: -90,
+                      left: -50,
+                      width: 260,
+                      height: 150,
+                      borderRadius: "50%",
+                      border: "1px solid rgba(125, 211, 252, 0.22)",
+                    }}
+                  />
+                  <Text
+                    style={{
+                      color: "rgba(255,255,255,0.75)",
+                      textTransform: "uppercase",
+                      letterSpacing: 2,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      position: "relative",
+                      zIndex: 1,
+                    }}
+                  >
+                    Dashboard Overview
+                  </Text>
+                  <Title
+                    level={2}
+                    style={{
+                      margin: "12px 0 10px",
+                      color: "#ffffff",
+                      fontSize: 38,
+                      lineHeight: 1.05,
+                      position: "relative",
+                      zIndex: 1,
+                    }}
+                  >
+                    Admin Dashboard
+                  </Title>
+                  <Text
+                    style={{
+                      color: "rgba(255,255,255,0.82)",
+                      fontSize: 14,
+                      maxWidth: 390,
+                      lineHeight: 1.6,
+                      position: "relative",
+                      zIndex: 1,
+                    }}
+                  >
+                    Track dealer billing performance, retailer completion value, and business coverage
+                    in one clean view.
+                  </Text>
+                </div>
+              </Col>
+              <Col xs={24} xl={13}>
+                <Row gutter={[12, 12]}>
+                  {cards.map((card, index) => {
+                    const visual = TOP_CARD_STYLES[index];
+                    const CardIcon = card.icon;
+
+                    return (
+                    <Col key={card.label} xs={12}>
+                      <div
+                        style={{
+                          position: "relative",
+                          zIndex: 1,
+                          minHeight: 118,
+                          borderRadius: 24,
+                          padding: 16,
+                          background: visual.background,
+                          border: "1px solid rgba(255,255,255,0.28)",
+                          boxShadow:
+                            "inset 0 1px 0 rgba(255,255,255,0.2), 0 14px 30px rgba(15, 23, 42, 0.14)",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: -8,
+                            left: 18,
+                            width: 76,
+                            height: 2,
+                            background: "rgba(255,255,255,0.88)",
+                            boxShadow: `0 0 14px ${visual.glow}`,
                           }}
                         />
-                        <Line
-                          type="monotone"
-                          dataKey="amount"
-                          stroke="#7c3aed"
-                          strokeWidth={3}
-                          dot={{ r: 6, strokeWidth: 2, fill: "#ffffff" }}
-                          activeDot={{ r: 7 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div style={{ height: "100%", display: "grid", placeItems: "center" }}>
-                      <Empty
-                        description="No shipped bill found for the selected month, year, and user"
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                      />
-                    </div>
-                  )}
-                </div>
-              </Space>
-            </Card>
-          </Space>
-        )}
+                        <div
+                          style={{
+                            position: "absolute",
+                            right: 16,
+                            bottom: 14,
+                            color: "rgba(255,255,255,0.18)",
+                            opacity: 0.9,
+                          }}
+                        >
+                          {React.createElement(CardIcon as any, { size: 42, strokeWidth: 1.75 })}
+                        </div>
+                        <Text
+                          style={{
+                            position: "relative",
+                            zIndex: 1,
+                            color: "#ffffff",
+                            fontWeight: 700,
+                            display: "block",
+                            marginTop: 2,
+                            fontSize: 13,
+                          }}
+                        >
+                          {card.label}
+                        </Text>
+                        <div
+                          style={{
+                            position: "relative",
+                            zIndex: 1,
+                            fontSize: 28,
+                            lineHeight: 1,
+                            fontWeight: 900,
+                            marginTop: 5,
+                            color: "#ffffff",
+                            textShadow: "0 6px 18px rgba(15, 23, 42, 0.18)",
+                          }}
+                        >
+                          {card.value}
+                        </div>
+                        <Text
+                          style={{
+                            position: "relative",
+                            zIndex: 1,
+                            color: "rgba(255,255,255,0.86)",
+                            fontSize: 11,
+                            marginTop: 6,
+                          }}
+                        >
+                          {card.helper}
+                        </Text>
+                      </div>
+                    </Col>
+                  )})}
+                </Row>
+              </Col>
+            </Row>
+          </div>
+
+          {loading ? (
+            <div style={{ minHeight: 240, display: "grid", placeItems: "center" }}>
+              <Spin size="large" />
+            </div>
+          ) : error ? (
+            <Alert type="error" showIcon message={error} />
+          ) : (
+            <Space direction="vertical" size={14} style={{ width: "100%" }}>
+              <RankingSectionHeader
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
+                selectedDateRange={selectedDateRange}
+                monthOptions={monthOptions}
+                yearOptions={yearOptions}
+                onMonthChange={setSelectedMonth}
+                onYearChange={setSelectedYear}
+                onDateRangeChange={setSelectedDateRange}
+              />
+
+              <Row gutter={[12, 12]}>
+                <Col xs={24} xl={12}>
+                  <RankingPanel
+                    title="Top 10 Dealers"
+                    subtitle="Ranked by total bill amount in the selected period."
+                    countLabel="dealer bills"
+                    countValue={dealerBillCount}
+                    amountValue={dealerBillAmount}
+                    amountTone="cyan"
+                    countTone="green"
+                    data={topDealers}
+                    columns={rankingColumns("Dealer", "Bills")}
+                    emptyText="No dealer bills found for this filter"
+                    borderColor="1px solid rgba(0, 105, 92, 0.08)"
+                    background="linear-gradient(180deg, #ffffff 0%, #f9fffd 100%)"
+                  />
+                </Col>
+
+                <Col xs={24} xl={12}>
+                  <RankingPanel
+                    title="Top 10 Retailers"
+                    subtitle="Ranked by completed order amount."
+                    countLabel="completed orders"
+                    countValue={completedOrderCount}
+                    amountValue={completedOrderAmount}
+                    amountTone="purple"
+                    countTone="blue"
+                    data={topRetailers}
+                    columns={rankingColumns("Retailer", "Orders")}
+                    emptyText="No completed retailer orders found for this filter"
+                    borderColor="1px solid rgba(29, 78, 216, 0.08)"
+                    background="linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)"
+                  />
+                </Col>
+              </Row>
+            </Space>
+          )}
+        </Space>
       </Card>
     </div>
   );

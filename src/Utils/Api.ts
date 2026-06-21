@@ -68,6 +68,8 @@ export const getAdminDashboardSummary = async (params?: {
   month?: number;
   year?: number;
   userId?: string;
+  fromDate?: string;
+  toDate?: string;
 }) => {
   try {
     const response = await API.get("/admin/dashboard/summary", { params });
@@ -177,7 +179,13 @@ export const deleteAdminShop = async (id: string) => {
   }
 };
 
-export const getAllAdminBills = async (params?: { search?: string }) => {
+export const getAllAdminBills = async (params?: {
+  search?: string;
+  month?: number;
+  year?: number;
+  fromDate?: string;
+  toDate?: string;
+}) => {
   try {
     const response = await API.get("/admin/retailer/bills/all", { params });
     return response.data;
@@ -242,15 +250,6 @@ export const bulkDeleteAdminBills = async (billIds: string[]) => {
 export const markAdminBillsAsCompleted = async (billIds: string[]) => {
   try {
     const response = await API.patch("/admin/retailer/bills/complete", { billIds });
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-export const markAdminBillsAsShipped = async (billIds: string[]) => {
-  try {
-    const response = await API.patch("/admin/retailer/bills/ship", { billIds });
     return response.data;
   } catch (error) {
     throw error;
@@ -411,7 +410,13 @@ export const deleteDealerProduct = async (id: string) => {
   }
 };
 
-export const getAllDealerBills = async (params?: { search?: string }) => {
+export const getAllDealerBills = async (params?: {
+  search?: string;
+  month?: number;
+  year?: number;
+  fromDate?: string;
+  toDate?: string;
+}) => {
   try {
     const response = await API.get("/admin/dealer/bills", { params });
     return response.data;
