@@ -134,13 +134,6 @@ const isCompletedStatus = (status?: string) =>
     normalizeStatus(status),
   );
 
-const formatCurrency = (value?: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-
 const formatRoundedCurrency = (value?: number) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -148,14 +141,6 @@ const formatRoundedCurrency = (value?: number) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(Math.round(Number(value || 0)));
-
-const formatCompactCurrency = (value?: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(Number(value || 0));
 
 const getRetailerAmount = (record: RetailerBillItem) =>
   Number(
@@ -237,8 +222,6 @@ const buildRanking = <T,>(
       rank: index + 1,
     }));
 };
-
-const getLeadingEntry = (rows: RankingRow[]) => rows[0]?.name || "No leader yet";
 
 type RankingSectionHeaderProps = {
   selectedMonth: number;
@@ -722,11 +705,6 @@ const Dashboard: React.FC = () => {
       icon: FiUsers,
     },
   ];
-
-  const selectedPeriodLabel =
-    selectedDateRange?.[0] && selectedDateRange?.[1]
-      ? `${selectedDateRange[0].format("DD MMM YYYY")} - ${selectedDateRange[1].format("DD MMM YYYY")}`
-      : `${monthOptions.find((option) => option.value === selectedMonth)?.label || "Month"} ${selectedYear}`;
 
   return (
     <div
