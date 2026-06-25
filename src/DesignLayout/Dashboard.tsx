@@ -1,8 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
-import { Alert, Card, Col, DatePicker, Empty, Row, Select, Space, Spin, Table, Tag, Typography } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Alert, Card, Col, Empty, Row, Select, Space, Spin, Tag, Typography } from "antd";
 import { FiBox, FiMapPin, FiShoppingBag, FiUsers } from "react-icons/fi";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   getAdminDashboardSummary,
   getAllAdminBills,
@@ -11,8 +19,6 @@ import {
 } from "../Utils/Api";
 
 const { Title, Text } = Typography;
-const { RangePicker } = DatePicker;
-
 const SURFACE = {
   page:
     "radial-gradient(circle at top left, rgba(13, 148, 136, 0.14) 0%, rgba(13, 148, 136, 0) 32%), radial-gradient(circle at top right, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0) 28%), linear-gradient(180deg, #f4fbfa 0%, #eef5fb 48%, #f8fafc 100%)",
@@ -42,6 +48,19 @@ const TOP_CARD_STYLES = [
       "linear-gradient(135deg, rgba(37, 99, 235, 0.96) 0%, rgba(99, 102, 241, 0.78) 55%, rgba(139, 92, 246, 0.74) 100%)",
     glow: "rgba(129, 140, 248, 0.34)",
   },
+] as const;
+
+const PIE_COLORS = [
+  "#0f766e",
+  "#0ea5e9",
+  "#2563eb",
+  "#7c3aed",
+  "#ea580c",
+  "#dc2626",
+  "#0891b2",
+  "#16a34a",
+  "#9333ea",
+  "#ca8a04",
 ] as const;
 
 type DashboardSummary = {
@@ -101,8 +120,6 @@ type RankingRow = {
   amount: number;
 };
 
-type DateRangeValue = [Dayjs | null, Dayjs | null] | null;
-
 const monthOptions = [
   { value: 1, label: "January" },
   { value: 2, label: "February" },
@@ -117,6 +134,8 @@ const monthOptions = [
   { value: 11, label: "November" },
   { value: 12, label: "December" },
 ];
+
+const monthShortLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const now = dayjs();
 const defaultSummary: DashboardSummary = {
@@ -164,16 +183,8 @@ const isWithinFilter = (
   value: Dayjs | null,
   selectedMonth: number,
   selectedYear: number,
-  selectedDateRange: DateRangeValue,
 ) => {
   if (!value) return false;
-
-  if (selectedDateRange?.[0] && selectedDateRange?.[1]) {
-    return (
-      (value.isAfter(selectedDateRange[0], "day") || value.isSame(selectedDateRange[0], "day")) &&
-      (value.isBefore(selectedDateRange[1], "day") || value.isSame(selectedDateRange[1], "day"))
-    );
-  }
 
   return value.month() + 1 === selectedMonth && value.year() === selectedYear;
 };
@@ -223,277 +234,422 @@ const buildRanking = <T,>(
     }));
 };
 
-type RankingSectionHeaderProps = {
-  selectedMonth: number;
-  selectedYear: number;
-  selectedDateRange: DateRangeValue;
-  monthOptions: Array<{ value: number; label: string }>;
-  yearOptions: Array<{ value: number; label: string }>;
-  onMonthChange: (value: number) => void;
-  onYearChange: (value: number) => void;
-  onDateRangeChange: (value: DateRangeValue) => void;
-};
-
 type RankingPanelProps = {
   title: string;
   subtitle: string;
-  countLabel: string;
-  countValue: number;
   amountValue: number;
   amountTone: string;
   countTone: string;
   data: RankingRow[];
-  columns: ColumnsType<RankingRow>;
   emptyText: string;
   borderColor: string;
   background: string;
+  selectedMonth: number;
+  selectedYear: number;
+  yearOptions: Array<{ value: number; label: string }>;
+  onMonthChange: (value: number) => void;
+  onYearChange: (value: number) => void;
 };
 
-const RankingSectionHeader: React.FC<RankingSectionHeaderProps> = ({
-  selectedMonth,
-  selectedYear,
-  selectedDateRange,
-  monthOptions,
-  yearOptions,
-  onMonthChange,
-  onYearChange,
-  onDateRangeChange,
-}) => (
-  <Card
-    bordered={false}
-    style={{
-      borderRadius: 18,
-      border: "1px solid rgba(148, 163, 184, 0.12)",
-      boxShadow: "0 10px 24px rgba(15, 23, 42, 0.04)",
-      background:
-        "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(240,249,255,0.96) 45%, rgba(236,253,245,0.96) 100%)",
-      overflow: "hidden",
-    }}
-    bodyStyle={{ padding: 14 }}
-  >
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        background:
-          "radial-gradient(circle at top right, rgba(56, 189, 248, 0.12) 0%, rgba(56, 189, 248, 0) 30%), radial-gradient(circle at bottom left, rgba(20, 184, 166, 0.12) 0%, rgba(20, 184, 166, 0) 28%)",
-        pointerEvents: "none",
-      }}
-    />
-    <Row
-      gutter={[12, 12]}
-      style={{
-        width: "100%",
-        position: "relative",
-        zIndex: 1,
-      }}
-      align="middle"
-    >
-      <Col xs={24} xl={7}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <Text
-            style={{
-              color: "#0f766e",
-              fontSize: 10,
-              fontWeight: 800,
-              letterSpacing: 0.9,
-              textTransform: "uppercase",
-            }}
-          >
-            Performance Filters
-          </Text>
-          <Title level={5} style={{ margin: 0, color: "#0f172a", fontSize: 20 }}>
-            Top 10 Rankings
-          </Title>
-          <Text style={{ color: "#475569", fontSize: 12 }}>
-            Switch the period to compare leaderboards by value and order activity.
-          </Text>
-        </div>
-      </Col>
-      <Col xs={24} xl={17}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-            gap: 10,
-          }}
-        >
-          <Select
-            size="small"
-            value={selectedMonth}
-            onChange={onMonthChange}
-            options={monthOptions}
-          />
-          <Select
-            size="small"
-            value={selectedYear}
-            onChange={onYearChange}
-            options={yearOptions}
-          />
-          <RangePicker
-            size="small"
-            value={selectedDateRange}
-            onChange={(value) => onDateRangeChange(value)}
-            format="DD-MM-YYYY"
-            allowClear
-            style={{ width: "100%" }}
-          />
-        </div>
-      </Col>
-    </Row>
-  </Card>
-);
+type RankingPieTooltipProps = {
+  index: number;
+  rank: number;
+  name: string;
+  amount: number;
+};
+
+type RevenueMonthRow = {
+  month: string;
+  totalRevenue: number;
+  dealerRevenue: number;
+  retailerRevenue: number;
+};
+
+const polarToCartesian = (cx: number, cy: number, radius: number, angleInDegrees: number) => {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+  return {
+    x: cx + radius * Math.cos(angleInRadians),
+    y: cy + radius * Math.sin(angleInRadians),
+  };
+};
+
+const createDonutSegmentPath = (
+  cx: number,
+  cy: number,
+  innerRadius: number,
+  outerRadius: number,
+  startAngle: number,
+  endAngle: number,
+) => {
+  const outerStart = polarToCartesian(cx, cy, outerRadius, endAngle);
+  const outerEnd = polarToCartesian(cx, cy, outerRadius, startAngle);
+  const innerStart = polarToCartesian(cx, cy, innerRadius, endAngle);
+  const innerEnd = polarToCartesian(cx, cy, innerRadius, startAngle);
+  const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 0 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 1 ${innerStart.x} ${innerStart.y}`,
+    "Z",
+  ].join(" ");
+};
 
 const RankingPanel: React.FC<RankingPanelProps> = ({
   title,
   subtitle,
-  countLabel,
-  countValue,
   amountValue,
   amountTone,
   countTone,
   data,
-  columns,
   emptyText,
   borderColor,
   background,
-}) => (
-  <Card
-    bordered={false}
-    style={{
-      borderRadius: 18,
-      border: borderColor,
-      boxShadow: "0 10px 24px rgba(15, 23, 42, 0.05)",
-      background,
-      overflow: "hidden",
-    }}
-    bodyStyle={{ padding: 0 }}
-  >
+  selectedMonth,
+  selectedYear,
+  yearOptions,
+  onMonthChange,
+  onYearChange,
+}) => {
+  const chartData = data.map((item) => ({
+    index: item.rank - 1,
+    rank: item.rank,
+    name: item.name,
+    amount: item.amount,
+  }));
+  const [hoveredSlice, setHoveredSlice] = useState<RankingPieTooltipProps | null>(null);
+  const totalAmount = chartData.reduce((sum, item) => sum + item.amount, 0);
+  const cx = 170;
+  const cy = 170;
+  const innerRadius = 72;
+  const outerRadius = 132;
+  const startAngle = -90;
+
+  let runningAngle = startAngle;
+  const donutSegments = chartData.map((item) => {
+    const sweep = totalAmount > 0 ? (item.amount / totalAmount) * 360 : 0;
+    const segmentStart = runningAngle;
+    const segmentEnd = runningAngle + sweep;
+    const midAngle = segmentStart + sweep / 2;
+    const labelPoint = polarToCartesian(cx, cy, (innerRadius + outerRadius) / 2, midAngle);
+    const outerLabelPoint = polarToCartesian(cx, cy, outerRadius + 12, midAngle);
+    const calloutEndX = outerLabelPoint.x + (outerLabelPoint.x >= cx ? 18 : -18);
+    const path = createDonutSegmentPath(cx, cy, innerRadius, outerRadius, segmentStart, segmentEnd);
+
+    runningAngle = segmentEnd;
+
+    return {
+      ...item,
+      sweep,
+      path,
+      midAngle,
+      labelPoint,
+      outerLabelPoint,
+      calloutEndX,
+    };
+  });
+
+  const distributeCalloutLabels = <T extends {
+    sweep: number;
+    outerLabelPoint: { x: number; y: number };
+    calloutEndX: number;
+  }>(segments: T[], isRightSide: boolean) => {
+    const minimumGap = 18;
+    const minY = 26;
+    const maxY = 314;
+    const smallSegments = segments
+      .filter((segment) => segment.sweep > 0 && segment.sweep < 22)
+      .sort((left, right) => left.outerLabelPoint.y - right.outerLabelPoint.y);
+
+    let previousY = minY - minimumGap;
+
+    return smallSegments.map((segment) => {
+      const adjustedY = Math.max(
+        minY,
+        Math.min(maxY, Math.max(segment.outerLabelPoint.y, previousY + minimumGap)),
+      );
+
+      previousY = adjustedY;
+
+      return {
+        ...segment,
+        calloutLabelY: adjustedY,
+        calloutBendX: segment.outerLabelPoint.x + (isRightSide ? 10 : -10),
+      };
+    });
+  };
+
+  const leftCallouts = distributeCalloutLabels(
+    donutSegments.filter((segment) => segment.outerLabelPoint.x < cx),
+    false,
+  );
+  const rightCallouts = distributeCalloutLabels(
+    donutSegments.filter((segment) => segment.outerLabelPoint.x >= cx),
+    true,
+  );
+  const adjustedCalloutMap = new Map(
+    [...leftCallouts, ...rightCallouts].map((segment) => [segment.rank, segment]),
+  );
+
+  return (
+    <Card
+      bordered={false}
+      style={{
+        borderRadius: 18,
+        border: borderColor,
+        boxShadow: "0 10px 24px rgba(15, 23, 42, 0.05)",
+        background,
+        overflow: "hidden",
+      }}
+      bodyStyle={{ padding: 0 }}
+    >
+      <div
+        style={{
+          padding: 14,
+          borderBottom: "1px solid rgba(226, 232, 240, 0.9)",
+          background:
+            countTone === "green"
+              ? "linear-gradient(135deg, rgba(236,253,245,0.95) 0%, rgba(240,249,255,0.95) 100%)"
+              : "linear-gradient(135deg, rgba(239,246,255,0.96) 0%, rgba(250,245,255,0.96) 100%)",
+        }}
+      >
+        <Row gutter={[12, 12]} align="middle">
+          <Col flex="auto">
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: 4 }}>
+                <Title level={5} style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>
+                  {title}
+                </Title>
+                <Text style={{ color: "#64748b", fontSize: 12 }}>{subtitle}</Text>
+              </div>
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 14,
+                  background: "#ffffff",
+                  border: "1px solid rgba(148, 163, 184, 0.14)",
+                  minWidth: 220,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "grid", gap: 2 }}>
+                  <Text style={{ fontSize: 10, color: "#64748b" }}>Amount</Text>
+                  <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 16 }}>
+                    {formatRoundedCurrency(amountValue)}
+                  </div>
+                </div>
+                <Tag color={amountTone} style={{ margin: 0, borderRadius: 999, fontSize: 10 }}>
+                  live total
+                </Tag>
+              </div>
+            </div>
+          </Col>
+          <Col xs={24} sm="auto">
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(122px, 1fr) minmax(104px, 1fr)",
+                gap: 8,
+                minWidth: 236,
+              }}
+            >
+              <Select
+                size="middle"
+                value={selectedMonth}
+                onChange={onMonthChange}
+                options={monthOptions}
+                style={{ width: "100%" }}
+              />
+              <Select
+                size="middle"
+                value={selectedYear}
+                onChange={onYearChange}
+                options={yearOptions}
+                style={{ width: "100%" }}
+              />
+            </div>
+          </Col>
+        </Row>
+      </div>
+
+      <div style={{ padding: 10 }}>
+        <div
+          style={{
+            height: 360,
+            borderRadius: 18,
+            border: "1px solid rgba(226, 232, 240, 0.88)",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+            padding: 10,
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          {chartData.length ? (
+            <div style={{ height: "100%", display: "grid", placeItems: "center" }}>
+              <div style={{ display: "grid", placeItems: "center" }}>
+                <svg viewBox="0 0 340 340" style={{ width: "100%", maxWidth: 320, overflow: "visible" }}>
+                  <circle cx={cx} cy={cy} r={outerRadius} fill="rgba(226, 232, 240, 0.22)" />
+                  {donutSegments.map((segment, index) => {
+                    return (
+                      <g
+                        key={`${segment.rank}-${segment.name}`}
+                        onMouseEnter={() => setHoveredSlice(segment)}
+                        onMouseLeave={() => setHoveredSlice(null)}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <path
+                          d={segment.path}
+                          fill={PIE_COLORS[index % PIE_COLORS.length]}
+                          style={{ transition: "opacity 140ms ease" }}
+                        />
+                        {segment.sweep >= 22 ? (
+                          <text
+                            x={segment.labelPoint.x}
+                            y={segment.labelPoint.y}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            fill="#ffffff"
+                            fontSize="16"
+                            fontWeight="800"
+                            style={{ pointerEvents: "none", textShadow: "0 2px 10px rgba(15, 23, 42, 0.28)" }}
+                          >
+                            {segment.rank}
+                          </text>
+                        ) : segment.sweep > 0 ? (
+                          (() => {
+                            const adjustedSegment = adjustedCalloutMap.get(segment.rank);
+                            const calloutLabelY = adjustedSegment?.calloutLabelY ?? segment.outerLabelPoint.y;
+                            const calloutBendX = adjustedSegment?.calloutBendX ?? segment.outerLabelPoint.x;
+                            const isRightSide = segment.outerLabelPoint.x >= cx;
+
+                            return (
+                              <>
+                                <path
+                                  d={`M ${segment.outerLabelPoint.x} ${segment.outerLabelPoint.y} L ${calloutBendX} ${calloutLabelY} L ${segment.calloutEndX} ${calloutLabelY}`}
+                                  fill="none"
+                                  stroke={PIE_COLORS[index % PIE_COLORS.length]}
+                                  strokeWidth={2}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  style={{ pointerEvents: "none" }}
+                                />
+                                <text
+                                  x={segment.calloutEndX + (isRightSide ? 8 : -8)}
+                                  y={calloutLabelY}
+                                  textAnchor={isRightSide ? "start" : "end"}
+                                  dominantBaseline="central"
+                                  fill="#0f172a"
+                                  fontSize="13"
+                                  fontWeight="800"
+                                  style={{ pointerEvents: "none" }}
+                                >
+                                  {segment.rank}
+                                </text>
+                              </>
+                            );
+                          })()
+                        ) : null}
+                      </g>
+                    );
+                  })}
+                  <circle cx={cx} cy={cy} r={innerRadius - 6} fill="#ffffff" />
+                  <text x={cx} y={cy - 12} textAnchor="middle" fill="#64748b" fontSize="12" fontWeight="700">
+                    {hoveredSlice ? hoveredSlice.name : "Top 10"}
+                  </text>
+                  <text x={cx} y={cy + 18} textAnchor="middle" fill="#0f172a" fontSize="18" fontWeight="900">
+                    {hoveredSlice ? formatRoundedCurrency(hoveredSlice.amount) : chartData.length}
+                  </text>
+                </svg>
+              </div>
+            </div>
+          ) : (
+            <div style={{ height: "100%", display: "grid", placeItems: "center" }}>
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+const RevenueTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number; payload?: RevenueMonthRow }>;
+  label?: string;
+}) => {
+  if (!active || !payload?.length) return null;
+
+  const row = payload[0]?.payload;
+  if (!row) return null;
+
+  return (
     <div
       style={{
-        padding: 14,
-        borderBottom: "1px solid rgba(226, 232, 240, 0.9)",
-        background:
-          countTone === "green"
-            ? "linear-gradient(135deg, rgba(236,253,245,0.95) 0%, rgba(240,249,255,0.95) 100%)"
-            : "linear-gradient(135deg, rgba(239,246,255,0.96) 0%, rgba(250,245,255,0.96) 100%)",
+        borderRadius: 16,
+        padding: 12,
+        background: "rgba(15, 23, 42, 0.94)",
+        boxShadow: "0 18px 34px rgba(15, 23, 42, 0.24)",
+        border: "1px solid rgba(148, 163, 184, 0.18)",
       }}
     >
-      <Row gutter={[12, 12]} align="middle">
-        <Col flex="auto">
-          <div style={{ display: "grid", gap: 4 }}>
-            <Title level={5} style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>
-              {title}
-            </Title>
-            <Text style={{ color: "#64748b", fontSize: 12 }}>{subtitle}</Text>
-          </div>
-        </Col>
-        <Col>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(96px, auto))",
-              gap: 8,
-            }}
-          >
-            <div
-              style={{
-                padding: "8px 10px",
-                borderRadius: 14,
-                background: "#ffffff",
-                border: "1px solid rgba(148, 163, 184, 0.14)",
-                minWidth: 102,
-              }}
-            >
-              <Text style={{ fontSize: 10, color: "#64748b" }}>Volume</Text>
-              <div style={{ marginTop: 2, fontWeight: 800, color: "#0f172a", fontSize: 16 }}>
-                {countValue}
-              </div>
-              <Text style={{ fontSize: 10, color: "#64748b" }}>{countLabel}</Text>
-            </div>
-            <div
-              style={{
-                padding: "8px 10px",
-                borderRadius: 14,
-                background: "#ffffff",
-                border: "1px solid rgba(148, 163, 184, 0.14)",
-                minWidth: 102,
-              }}
-            >
-              <Text style={{ fontSize: 10, color: "#64748b" }}>Amount</Text>
-              <div style={{ marginTop: 2, fontWeight: 800, color: "#0f172a", fontSize: 16 }}>
-                {formatRoundedCurrency(amountValue)}
-              </div>
-              <Tag color={amountTone} style={{ margin: "4px 0 0", borderRadius: 999, fontSize: 10 }}>
-                live total
-              </Tag>
-            </div>
-          </div>
-        </Col>
-      </Row>
+      <Text style={{ color: "rgba(255,255,255,0.72)", fontSize: 11 }}>{label}</Text>
+      <div style={{ marginTop: 6, fontSize: 20, fontWeight: 800, color: "#ffffff" }}>
+        {formatRoundedCurrency(row.totalRevenue)}
+      </div>
+      <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+        <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 11 }}>
+          Dealer: {formatRoundedCurrency(row.dealerRevenue)}
+        </Text>
+        <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 11 }}>
+          Retailer: {formatRoundedCurrency(row.retailerRevenue)}
+        </Text>
+      </div>
     </div>
-
-    <div style={{ padding: 10 }}>
-      <Table
-        rowKey="key"
-        dataSource={data}
-        columns={columns}
-        pagination={false}
-        size="middle"
-        rowClassName={() => "dashboard-ranking-row"}
-        locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />,
-        }}
-        style={{ overflow: "hidden" }}
-      />
-    </div>
-  </Card>
-);
+  );
+};
 
 const Dashboard: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary>(defaultSummary);
   const [retailerBills, setRetailerBills] = useState<RetailerBillItem[]>([]);
   const [dealerBills, setDealerBills] = useState<DealerBillItem[]>([]);
+  const [revenueRetailerBills, setRevenueRetailerBills] = useState<RetailerBillItem[]>([]);
+  const [revenueDealerBills, setRevenueDealerBills] = useState<DealerBillItem[]>([]);
   const [allDealersCount, setAllDealersCount] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(now.month() + 1);
   const [selectedYear, setSelectedYear] = useState(now.year());
-  const [selectedDateRange, setSelectedDateRange] = useState<DateRangeValue>(null);
+  const [revenueYear, setRevenueYear] = useState(now.year());
   const [loading, setLoading] = useState(true);
+  const [revenueLoading, setRevenueLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revenueError, setRevenueError] = useState("");
 
   useEffect(() => {
     const loadDashboard = async () => {
       setLoading(true);
       setError("");
 
-      const fromDate =
-        selectedDateRange?.[0] && selectedDateRange?.[1]
-          ? selectedDateRange[0].format("YYYY-MM-DD")
-          : undefined;
-      const toDate =
-        selectedDateRange?.[0] && selectedDateRange?.[1]
-          ? selectedDateRange[1].format("YYYY-MM-DD")
-          : undefined;
-
       try {
         const [summaryRes, retailerRes, dealerRes, dealersRes] = await Promise.all([
           getAdminDashboardSummary({
             month: selectedMonth,
             year: selectedYear,
-            fromDate,
-            toDate,
           }),
           getAllAdminBills({
             month: selectedMonth,
             year: selectedYear,
-            fromDate,
-            toDate,
           }),
           getAllDealerBills({
             month: selectedMonth,
             year: selectedYear,
-            fromDate,
-            toDate,
           }),
           getAllDealers(),
         ]);
@@ -517,11 +673,41 @@ const Dashboard: React.FC = () => {
     };
 
     void loadDashboard();
-  }, [selectedDateRange, selectedMonth, selectedYear]);
+  }, [selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    const loadRevenue = async () => {
+      setRevenueLoading(true);
+      setRevenueError("");
+
+      try {
+        const [retailerRes, dealerRes] = await Promise.all([
+          getAllAdminBills({
+            year: revenueYear,
+          }),
+          getAllDealerBills({
+            year: revenueYear,
+          }),
+        ]);
+
+        setRevenueRetailerBills(Array.isArray(retailerRes?.data) ? retailerRes.data : []);
+        setRevenueDealerBills(Array.isArray(dealerRes?.data) ? dealerRes.data : []);
+      } catch (err: any) {
+        setRevenueError(
+          err?.response?.data?.message || err?.message || "Failed to load revenue data",
+        );
+      } finally {
+        setRevenueLoading(false);
+      }
+    };
+
+    void loadRevenue();
+  }, [revenueYear]);
 
   const yearOptions = useMemo(() => {
     const yearSet = new Set<number>(summary.availableYears?.length ? summary.availableYears : []);
     yearSet.add(selectedYear);
+    yearSet.add(revenueYear);
 
     retailerBills.forEach((bill) => {
       const parsed = toDate(bill.createdAt || bill.updatedAt);
@@ -543,7 +729,7 @@ const Dashboard: React.FC = () => {
         value: year,
         label: String(year),
       }));
-  }, [dealerBills, retailerBills, selectedYear, summary.availableYears]);
+  }, [dealerBills, retailerBills, revenueYear, selectedYear, summary.availableYears]);
 
   const filteredRetailerBills = useMemo(
     () =>
@@ -553,10 +739,9 @@ const Dashboard: React.FC = () => {
           toDate(bill.createdAt || bill.updatedAt),
           selectedMonth,
           selectedYear,
-          selectedDateRange,
         );
       }),
-    [retailerBills, selectedDateRange, selectedMonth, selectedYear],
+    [retailerBills, selectedMonth, selectedYear],
   );
 
   const filteredDealerBills = useMemo(
@@ -566,19 +751,16 @@ const Dashboard: React.FC = () => {
           toDate(bill.billDate || bill.createdAt || bill.updatedAt),
           selectedMonth,
           selectedYear,
-          selectedDateRange,
         ),
       ),
-    [dealerBills, selectedDateRange, selectedMonth, selectedYear],
+    [dealerBills, selectedMonth, selectedYear],
   );
 
-  const completedOrderCount = filteredRetailerBills.length;
   const completedOrderAmount = filteredRetailerBills.reduce(
     (sum, bill) => sum + getRetailerAmount(bill),
     0,
   );
   const totalDealersCount = Number(summary.dealersCount ?? allDealersCount ?? 0);
-  const dealerBillCount = filteredDealerBills.length;
   const dealerBillAmount = filteredDealerBills.reduce((sum, bill) => sum + getDealerAmount(bill), 0);
 
   const topRetailers = useMemo(
@@ -605,67 +787,35 @@ const Dashboard: React.FC = () => {
     [filteredDealerBills],
   );
 
-  const rankingColumns = (entityLabel: string, countLabel: string): ColumnsType<RankingRow> => [
-    {
-      title: "Rank",
-      dataIndex: "rank",
-      key: "rank",
-      width: 80,
-      align: "center",
-      render: (value: number) => (
-        <Tag
-          color={value <= 3 ? "gold" : "default"}
-          style={{
-            margin: 0,
-            borderRadius: 999,
-            minWidth: 44,
-            textAlign: "center",
-            fontWeight: 700,
-          }}
-        >
-          #{value}
-        </Tag>
-      ),
-    },
-    {
-      title: entityLabel,
-      dataIndex: "name",
-      key: "name",
-      render: (_, record) => (
-        <div style={{ display: "grid", gap: 2 }}>
-          <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 15 }}>{record.name}</div>
-          <Text style={{ color: "#64748b", fontSize: 12 }}>{record.city}</Text>
-        </div>
-      ),
-    },
-    {
-      title: countLabel,
-      dataIndex: "count",
-      key: "count",
-      width: 130,
-      align: "center",
-      render: (value: number) => (
-        <Tag
-          color="blue"
-          style={{ margin: 0, borderRadius: 999, minWidth: 40, textAlign: "center" }}
-        >
-          {value}
-        </Tag>
-      ),
-    },
-    {
-      title: "Amount",
-      dataIndex: "amount",
-      key: "amount",
-      width: 160,
-      align: "right",
-      render: (value: number) => (
-        <Text strong style={{ fontSize: 15, color: "#0f172a" }}>
-          {formatRoundedCurrency(value)}
-        </Text>
-      ),
-    },
-  ];
+  const revenueChartData = useMemo(() => {
+    const dealerMonthlyTotals = Array.from({ length: 12 }, () => 0);
+    const retailerMonthlyTotals = Array.from({ length: 12 }, () => 0);
+
+    revenueDealerBills.forEach((bill) => {
+      const parsed = toDate(bill.billDate || bill.createdAt || bill.updatedAt);
+      if (!parsed || parsed.year() !== revenueYear) return;
+      dealerMonthlyTotals[parsed.month()] += getDealerAmount(bill);
+    });
+
+    revenueRetailerBills.forEach((bill) => {
+      if (!isCompletedStatus(bill.status)) return;
+      const parsed = toDate(bill.createdAt || bill.updatedAt);
+      if (!parsed || parsed.year() !== revenueYear) return;
+      retailerMonthlyTotals[parsed.month()] += getRetailerAmount(bill);
+    });
+
+    return monthShortLabels.map((month, index) => ({
+      month,
+      dealerRevenue: dealerMonthlyTotals[index],
+      retailerRevenue: retailerMonthlyTotals[index],
+      totalRevenue: dealerMonthlyTotals[index] + retailerMonthlyTotals[index],
+    }));
+  }, [revenueDealerBills, revenueRetailerBills, revenueYear]);
+
+  const totalRevenueAmount = useMemo(
+    () => revenueChartData.reduce((sum, row) => sum + row.totalRevenue, 0),
+    [revenueChartData],
+  );
 
   const cards = [
     {
@@ -758,177 +908,91 @@ const Dashboard: React.FC = () => {
                 background: "rgba(255,255,255,0.08)",
               }}
             />
-            <Row gutter={[14, 14]} align="stretch">
-              <Col xs={24} xl={11}>
-                <div
-                  style={{
-                    position: "relative",
-                    zIndex: 1,
-                    height: "100%",
-                    minHeight: 250,
-                    borderRadius: 24,
-                    padding: 24,
-                    border: "1px solid rgba(255,255,255,0.34)",
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.04) 100%)",
-                    boxShadow:
-                      "inset 0 1px 0 rgba(255,255,255,0.28), 0 16px 34px rgba(15, 23, 42, 0.12)",
-                    overflow: "hidden",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: -120,
-                      right: -20,
-                      width: 220,
-                      height: 220,
-                      borderRadius: "50%",
-                      background: "rgba(45, 212, 191, 0.12)",
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: -90,
-                      left: -50,
-                      width: 260,
-                      height: 150,
-                      borderRadius: "50%",
-                      border: "1px solid rgba(125, 211, 252, 0.22)",
-                    }}
-                  />
-                  <Text
-                    style={{
-                      color: "rgba(255,255,255,0.75)",
-                      textTransform: "uppercase",
-                      letterSpacing: 2,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      position: "relative",
-                      zIndex: 1,
-                    }}
-                  >
-                    Dashboard Overview
-                  </Text>
-                  <Title
-                    level={2}
-                    style={{
-                      margin: "12px 0 10px",
-                      color: "#ffffff",
-                      fontSize: 38,
-                      lineHeight: 1.05,
-                      position: "relative",
-                      zIndex: 1,
-                    }}
-                  >
-                    Admin Dashboard
-                  </Title>
-                  <Text
-                    style={{
-                      color: "rgba(255,255,255,0.82)",
-                      fontSize: 14,
-                      maxWidth: 390,
-                      lineHeight: 1.6,
-                      position: "relative",
-                      zIndex: 1,
-                    }}
-                  >
-                    Track dealer billing performance, retailer completion value, and business coverage
-                    in one clean view.
-                  </Text>
-                </div>
-              </Col>
-              <Col xs={24} xl={13}>
-                <Row gutter={[12, 12]}>
-                  {cards.map((card, index) => {
-                    const visual = TOP_CARD_STYLES[index];
-                    const CardIcon = card.icon;
+            <Row gutter={[12, 12]} align="stretch">
+              {cards.map((card, index) => {
+                const visual = TOP_CARD_STYLES[index];
+                const CardIcon = card.icon;
 
-                    return (
-                    <Col key={card.label} xs={12}>
+                return (
+                  <Col key={card.label} xs={24} sm={12} xl={6}>
+                    <div
+                      style={{
+                        position: "relative",
+                        zIndex: 1,
+                        minHeight: 118,
+                        borderRadius: 24,
+                        padding: 16,
+                        background: visual.background,
+                        border: "1px solid rgba(255,255,255,0.28)",
+                        boxShadow:
+                          "inset 0 1px 0 rgba(255,255,255,0.2), 0 14px 30px rgba(15, 23, 42, 0.14)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: -8,
+                          left: 18,
+                          width: 76,
+                          height: 2,
+                          background: "rgba(255,255,255,0.88)",
+                          boxShadow: `0 0 14px ${visual.glow}`,
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          right: 16,
+                          bottom: 14,
+                          color: "rgba(255,255,255,0.18)",
+                          opacity: 0.9,
+                        }}
+                      >
+                        {React.createElement(CardIcon as any, { size: 42, strokeWidth: 1.75 })}
+                      </div>
+                      <Text
+                        style={{
+                          position: "relative",
+                          zIndex: 1,
+                          color: "#ffffff",
+                          fontWeight: 700,
+                          display: "block",
+                          marginTop: 2,
+                          fontSize: 13,
+                        }}
+                      >
+                        {card.label}
+                      </Text>
                       <div
                         style={{
                           position: "relative",
                           zIndex: 1,
-                          minHeight: 118,
-                          borderRadius: 24,
-                          padding: 16,
-                          background: visual.background,
-                          border: "1px solid rgba(255,255,255,0.28)",
-                          boxShadow:
-                            "inset 0 1px 0 rgba(255,255,255,0.2), 0 14px 30px rgba(15, 23, 42, 0.14)",
-                          overflow: "hidden",
+                          fontSize: 28,
+                          lineHeight: 1,
+                          fontWeight: 900,
+                          marginTop: 5,
+                          color: "#ffffff",
+                          textShadow: "0 6px 18px rgba(15, 23, 42, 0.18)",
                         }}
                       >
-                        <div
-                          style={{
-                            position: "absolute",
-                            top: -8,
-                            left: 18,
-                            width: 76,
-                            height: 2,
-                            background: "rgba(255,255,255,0.88)",
-                            boxShadow: `0 0 14px ${visual.glow}`,
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: "absolute",
-                            right: 16,
-                            bottom: 14,
-                            color: "rgba(255,255,255,0.18)",
-                            opacity: 0.9,
-                          }}
-                        >
-                          {React.createElement(CardIcon as any, { size: 42, strokeWidth: 1.75 })}
-                        </div>
-                        <Text
-                          style={{
-                            position: "relative",
-                            zIndex: 1,
-                            color: "#ffffff",
-                            fontWeight: 700,
-                            display: "block",
-                            marginTop: 2,
-                            fontSize: 13,
-                          }}
-                        >
-                          {card.label}
-                        </Text>
-                        <div
-                          style={{
-                            position: "relative",
-                            zIndex: 1,
-                            fontSize: 28,
-                            lineHeight: 1,
-                            fontWeight: 900,
-                            marginTop: 5,
-                            color: "#ffffff",
-                            textShadow: "0 6px 18px rgba(15, 23, 42, 0.18)",
-                          }}
-                        >
-                          {card.value}
-                        </div>
-                        <Text
-                          style={{
-                            position: "relative",
-                            zIndex: 1,
-                            color: "rgba(255,255,255,0.86)",
-                            fontSize: 11,
-                            marginTop: 6,
-                          }}
-                        >
-                          {card.helper}
-                        </Text>
+                        {card.value}
                       </div>
-                    </Col>
-                  )})}
-                </Row>
-              </Col>
+                      <Text
+                        style={{
+                          position: "relative",
+                          zIndex: 1,
+                          color: "rgba(255,255,255,0.86)",
+                          fontSize: 11,
+                          marginTop: 6,
+                        }}
+                      >
+                        {card.helper}
+                      </Text>
+                    </div>
+                  </Col>
+                );
+              })}
             </Row>
           </div>
 
@@ -940,32 +1004,23 @@ const Dashboard: React.FC = () => {
             <Alert type="error" showIcon message={error} />
           ) : (
             <Space direction="vertical" size={14} style={{ width: "100%" }}>
-              <RankingSectionHeader
-                selectedMonth={selectedMonth}
-                selectedYear={selectedYear}
-                selectedDateRange={selectedDateRange}
-                monthOptions={monthOptions}
-                yearOptions={yearOptions}
-                onMonthChange={setSelectedMonth}
-                onYearChange={setSelectedYear}
-                onDateRangeChange={setSelectedDateRange}
-              />
-
               <Row gutter={[12, 12]}>
                 <Col xs={24} xl={12}>
                   <RankingPanel
                     title="Top 10 Dealers"
                     subtitle="Ranked by total bill amount in the selected period."
-                    countLabel="dealer bills"
-                    countValue={dealerBillCount}
                     amountValue={dealerBillAmount}
                     amountTone="cyan"
                     countTone="green"
                     data={topDealers}
-                    columns={rankingColumns("Dealer", "Bills")}
                     emptyText="No dealer bills found for this filter"
                     borderColor="1px solid rgba(0, 105, 92, 0.08)"
                     background="linear-gradient(180deg, #ffffff 0%, #f9fffd 100%)"
+                    selectedMonth={selectedMonth}
+                    selectedYear={selectedYear}
+                    yearOptions={yearOptions}
+                    onMonthChange={setSelectedMonth}
+                    onYearChange={setSelectedYear}
                   />
                 </Col>
 
@@ -973,19 +1028,176 @@ const Dashboard: React.FC = () => {
                   <RankingPanel
                     title="Top 10 Retailers"
                     subtitle="Ranked by completed order amount."
-                    countLabel="completed orders"
-                    countValue={completedOrderCount}
                     amountValue={completedOrderAmount}
                     amountTone="purple"
                     countTone="blue"
                     data={topRetailers}
-                    columns={rankingColumns("Retailer", "Orders")}
                     emptyText="No completed retailer orders found for this filter"
                     borderColor="1px solid rgba(29, 78, 216, 0.08)"
                     background="linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)"
+                    selectedMonth={selectedMonth}
+                    selectedYear={selectedYear}
+                    yearOptions={yearOptions}
+                    onMonthChange={setSelectedMonth}
+                    onYearChange={setSelectedYear}
                   />
                 </Col>
               </Row>
+
+              <Card
+                bordered={false}
+                style={{
+                  borderRadius: 18,
+                  border: "1px solid rgba(15, 118, 110, 0.08)",
+                  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.05)",
+                  background: "linear-gradient(180deg, #ffffff 0%, #f7fbff 100%)",
+                  overflow: "hidden",
+                }}
+                bodyStyle={{ padding: 0 }}
+              >
+                <div
+                  style={{
+                    padding: 12,
+                    borderBottom: "1px solid rgba(226, 232, 240, 0.9)",
+                    background:
+                      "linear-gradient(135deg, rgba(236,253,245,0.95) 0%, rgba(239,246,255,0.95) 100%)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <Title level={5} style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>
+                        Total Revenue
+                      </Title>
+                      <Text style={{ color: "#64748b", fontSize: 12 }}>
+                        Monthly combined revenue from dealer and retailer bills.
+                      </Text>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "flex-end",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        marginLeft: "auto",
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 14,
+                          background: "#ffffff",
+                          border: "1px solid rgba(148, 163, 184, 0.14)",
+                          minWidth: 220,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 2 }}>
+                          <Text style={{ fontSize: 10, color: "#64748b" }}>Year Revenue</Text>
+                          <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 16 }}>
+                            {formatRoundedCurrency(totalRevenueAmount)}
+                          </div>
+                        </div>
+                        <Tag color="green" style={{ margin: 0, borderRadius: 999, fontSize: 10 }}>
+                          combined total
+                        </Tag>
+                      </div>
+
+                      <div style={{ width: 118 }}>
+                        <Select
+                          size="middle"
+                          value={revenueYear}
+                          onChange={setRevenueYear}
+                          options={yearOptions}
+                          style={{ width: "100%" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ padding: 14 }}>
+                  {revenueLoading ? (
+                    <div style={{ minHeight: 320, display: "grid", placeItems: "center" }}>
+                      <Spin size="large" />
+                    </div>
+                  ) : revenueError ? (
+                    <Alert type="error" showIcon message={revenueError} />
+                  ) : revenueChartData.some((row) => row.totalRevenue > 0) ? (
+                    <div
+                      style={{
+                        height: 360,
+                        borderRadius: 18,
+                        border: "1px solid rgba(226, 232, 240, 0.88)",
+                        background:
+                          "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+                        padding: 12,
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={revenueChartData} margin={{ top: 10, right: 16, left: 4, bottom: 6 }}>
+                          <defs>
+                            <linearGradient id="revenueAreaFill" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#0f766e" stopOpacity={0.38} />
+                              <stop offset="70%" stopColor="#0ea5e9" stopOpacity={0.12} />
+                              <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.03} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.22)" vertical={false} />
+                          <XAxis
+                            dataKey="month"
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fill: "#64748b", fontSize: 12, fontWeight: 600 }}
+                          />
+                          <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            width={72}
+                            tick={{ fill: "#64748b", fontSize: 12, fontWeight: 600 }}
+                            tickFormatter={(value) => formatRoundedCurrency(Number(value))}
+                          />
+                          <Tooltip content={<RevenueTooltip />} cursor={{ stroke: "rgba(14, 165, 233, 0.18)", strokeWidth: 2 }} />
+                          <Area
+                            type="monotone"
+                            dataKey="totalRevenue"
+                            stroke="#0f766e"
+                            strokeWidth={3}
+                            fill="url(#revenueAreaFill)"
+                            activeDot={{ r: 6, fill: "#0ea5e9", stroke: "#ffffff", strokeWidth: 3 }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        minHeight: 320,
+                        display: "grid",
+                        placeItems: "center",
+                        borderRadius: 18,
+                        border: "1px solid rgba(226, 232, 240, 0.88)",
+                        background:
+                          "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+                      }}
+                    >
+                      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No revenue data found for this year" />
+                    </div>
+                  )}
+                </div>
+              </Card>
             </Space>
           )}
         </Space>

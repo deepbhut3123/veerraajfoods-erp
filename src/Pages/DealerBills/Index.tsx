@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
+import html2canvas from "html2canvas";
 import {
   Alert,
   Button,
@@ -20,6 +21,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
+  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   PlusOutlined,
@@ -34,6 +36,7 @@ import {
 } from "../../Utils/Api";
 
 const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
 const THEME = {
   dark: "#004D40",
   mid: "#00695C",
@@ -52,6 +55,7 @@ type DealerProductOption = {
   mrp: number;
   productName: string;
   productRate: number;
+  sequence?: number;
 };
 
 type DealerBillLineItem = {
@@ -103,13 +107,19 @@ type DealerBillCustomItem = {
 type DealerBillFormValues = {
   dealerId: string;
   billDate: Dayjs;
-  kattaCount: number;
+  kattaCount?: number;
   items: DealerBillMasterItem[];
   customItems: DealerBillCustomItem[];
 };
 
+type DateRangeValue = [Dayjs | null, Dayjs | null] | null;
+
 const EMPTY_MASTER_ITEMS: DealerBillMasterItem[] = [];
 const EMPTY_CUSTOM_ITEMS: DealerBillCustomItem[] = [];
+const EXPORT_FOOTER_LINES = [
+  "માલ મળે ત્યારે માલ બિલ મુજબ ચેક કરી ને જ લેવો.",
+  "માલ માં કઈ પણ ફેરફાર હોય તો ઓફિસ નંબર (90994 00116) માં જાણ કરવી.",
+];
 
 const roundToTwo = (value?: number) => {
   const normalizedValue = Number(value || 0);
@@ -140,11 +150,36 @@ const formatDate = (value?: string) => {
   return parsed.isValid() ? parsed.format("DD-MM-YYYY") : "-";
 };
 
+const formatExportDate = (value?: string) => {
+  if (!value) return "-";
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.format("D-M-YYYY") : "-";
+};
+
 const createEmptyCustomItem = (): DealerBillCustomItem => ({
   productName: "",
   amount: undefined,
   quantity: undefined,
 });
+
+const getDealerProductSequence = (product?: DealerProductOption | null) => {
+  const normalizedSequence = Number(product?.sequence);
+  return Number.isFinite(normalizedSequence) && normalizedSequence > 0
+    ? normalizedSequence
+    : Number.MAX_SAFE_INTEGER;
+};
+
+const sortDealerProductsBySequence = (items: DealerProductOption[]) =>
+  [...items].sort((left, right) => {
+    const sequenceDifference =
+      getDealerProductSequence(left) - getDealerProductSequence(right);
+
+    if (sequenceDifference !== 0) {
+      return sequenceDifference;
+    }
+
+    return left.productName.localeCompare(right.productName);
+  });
 
 const getDealerBillSequence = (
   records: DealerBillRecord[],
@@ -191,26 +226,31 @@ const DealerBillsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchText, setSearchText] = useState("");
-  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [dateRange, setDateRange] = useState<DateRangeValue>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [copyingImage, setCopyingImage] = useState(false);
   const [editingItem, setEditingItem] = useState<DealerBillRecord | null>(null);
   const [activeBill, setActiveBill] = useState<DealerBillRecord | null>(null);
+  const [exportBill, setExportBill] = useState<DealerBillRecord | null>(null);
+  const exportCardRef = useRef<HTMLDivElement | null>(null);
   const [form] = Form.useForm<DealerBillFormValues>();
   const watchedItems = Form.useWatch("items", form) ?? EMPTY_MASTER_ITEMS;
   const watchedCustomItems = Form.useWatch("customItems", form) ?? EMPTY_CUSTOM_ITEMS;
   const selectedDealerId = Form.useWatch("dealerId", form);
+  const orderedProducts = useMemo(() => sortDealerProductsBySequence(products), [products]);
 
-  const loadBills = async (search = "") => {
+  const loadBills = async (search = "", range: DateRangeValue = null) => {
     setLoading(true);
     setError("");
 
     try {
       const response = await getAllDealerBills({
         search: search.trim() || undefined,
+        fromDate: range?.[0] ? range[0].format("YYYY-MM-DD") : undefined,
+        toDate: range?.[1] ? range[1].format("YYYY-MM-DD") : undefined,
       });
       setData(response?.data || []);
-      setSelectedRowKeys([]);
     } catch (err: any) {
       setError(
         err?.response?.data?.message ||
@@ -230,7 +270,7 @@ const DealerBillsPage: React.FC = () => {
           getAllDealerProducts(),
         ]);
         setDealers(dealerRes?.data || []);
-        setProducts(productRes?.data || []);
+        setProducts(sortDealerProductsBySequence(productRes?.data || []));
       } catch (err: any) {
         setError(
           err?.response?.data?.message ||
@@ -245,11 +285,11 @@ const DealerBillsPage: React.FC = () => {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void loadBills(searchText);
+      void loadBills(searchText, dateRange);
     }, 350);
 
     return () => window.clearTimeout(timer);
-  }, [searchText]);
+  }, [dateRange, searchText]);
 
   const selectedDealer = useMemo(
     () => dealers.find((dealer) => dealer._id === selectedDealerId),
@@ -283,7 +323,7 @@ const DealerBillsPage: React.FC = () => {
   }, [form, modalOpen, selectedDealer?.margin]);
 
   const buildMasterItems = (bill?: DealerBillRecord | null) =>
-    products.map((product) => {
+    orderedProducts.map((product) => {
       const matchedItem = bill?.items?.find((item) => {
         const itemProductId =
           typeof item.productId === "object" ? item.productId?._id : item.productId;
@@ -299,6 +339,98 @@ const DealerBillsPage: React.FC = () => {
         quantity: matchedItem?.quantity,
       };
     });
+
+  const orderedActiveBillItems = useMemo(() => {
+    if (!activeBill?.items?.length) {
+      return [];
+    }
+
+    const productSequenceById = new Map(
+      orderedProducts.map((product, index) => [
+        product._id,
+        Number.isFinite(Number(product.sequence)) && Number(product.sequence) > 0
+          ? Number(product.sequence)
+          : index + 1,
+      ]),
+    );
+
+    return [...activeBill.items].sort((left, right) => {
+      const leftProductId =
+        typeof left.productId === "object" ? left.productId?._id : left.productId;
+      const rightProductId =
+        typeof right.productId === "object" ? right.productId?._id : right.productId;
+      const leftSequence = leftProductId
+        ? productSequenceById.get(leftProductId) ?? Number.MAX_SAFE_INTEGER
+        : Number.MAX_SAFE_INTEGER;
+      const rightSequence = rightProductId
+        ? productSequenceById.get(rightProductId) ?? Number.MAX_SAFE_INTEGER
+        : Number.MAX_SAFE_INTEGER;
+
+      if (leftSequence !== rightSequence) {
+        return leftSequence - rightSequence;
+      }
+
+      if (leftProductId && rightProductId) {
+        return 0;
+      }
+
+      if (leftProductId) {
+        return -1;
+      }
+
+      if (rightProductId) {
+        return 1;
+      }
+
+      return String(left.productName || "").localeCompare(String(right.productName || ""));
+    });
+  }, [activeBill?.items, orderedProducts]);
+
+  const orderedExportBillItems = useMemo(() => {
+    if (!exportBill?.items?.length) {
+      return [];
+    }
+
+    const productSequenceById = new Map(
+      orderedProducts.map((product, index) => [
+        product._id,
+        Number.isFinite(Number(product.sequence)) && Number(product.sequence) > 0
+          ? Number(product.sequence)
+          : index + 1,
+      ]),
+    );
+
+    return [...exportBill.items].sort((left, right) => {
+      const leftProductId =
+        typeof left.productId === "object" ? left.productId?._id : left.productId;
+      const rightProductId =
+        typeof right.productId === "object" ? right.productId?._id : right.productId;
+      const leftSequence = leftProductId
+        ? productSequenceById.get(leftProductId) ?? Number.MAX_SAFE_INTEGER
+        : Number.MAX_SAFE_INTEGER;
+      const rightSequence = rightProductId
+        ? productSequenceById.get(rightProductId) ?? Number.MAX_SAFE_INTEGER
+        : Number.MAX_SAFE_INTEGER;
+
+      if (leftSequence !== rightSequence) {
+        return leftSequence - rightSequence;
+      }
+
+      if (leftProductId && rightProductId) {
+        return 0;
+      }
+
+      if (leftProductId) {
+        return -1;
+      }
+
+      if (rightProductId) {
+        return 1;
+      }
+
+      return String(left.productName || "").localeCompare(String(right.productName || ""));
+    });
+  }, [exportBill?.items, orderedProducts]);
 
   const buildCustomItems = (bill?: DealerBillRecord | null) =>
     (bill?.items || [])
@@ -320,7 +452,7 @@ const DealerBillsPage: React.FC = () => {
     form.setFieldsValue({
       dealerId: undefined,
       billDate: dayjs(),
-      kattaCount: 0,
+      kattaCount: undefined,
       items: buildMasterItems(),
       customItems: [],
     });
@@ -332,7 +464,7 @@ const DealerBillsPage: React.FC = () => {
     form.setFieldsValue({
       dealerId: item.dealerId?._id || "",
       billDate: dayjs(item.billDate),
-      kattaCount: item.kattaCount ?? 0,
+      kattaCount: item.kattaCount ?? undefined,
       items: buildMasterItems(item),
       customItems: buildCustomItems(item),
     });
@@ -379,6 +511,19 @@ const DealerBillsPage: React.FC = () => {
     setSaving(true);
 
     try {
+      const kattaCount = Number(values.kattaCount);
+
+      if (!Number.isFinite(kattaCount) || kattaCount <= 0) {
+        form.setFields([
+          {
+            name: "kattaCount",
+            errors: ["Please enter katta greater than 0"],
+          },
+        ]);
+        setSaving(false);
+        return;
+      }
+
       const masterItems = (values.items || [])
         .filter((item) => item.productId && Number(item.quantity) > 0)
         .map((item) => ({
@@ -415,7 +560,7 @@ const DealerBillsPage: React.FC = () => {
       const payload = {
         dealerId: values.dealerId,
         billDate: values.billDate.format("YYYY-MM-DD"),
-        kattaCount: Number(values.kattaCount || 0),
+        kattaCount,
         items: [...masterItems, ...customItems],
       };
 
@@ -434,7 +579,7 @@ const DealerBillsPage: React.FC = () => {
       }
 
       closeModal();
-      await loadBills(searchText);
+      await loadBills(searchText, dateRange);
     } catch (err: any) {
       message.error(
         err?.response?.data?.message ||
@@ -453,7 +598,7 @@ const DealerBillsPage: React.FC = () => {
       if (activeBill?._id === id) {
         setActiveBill(null);
       }
-      await loadBills(searchText);
+      await loadBills(searchText, dateRange);
     } catch (err: any) {
       message.error(
         err?.response?.data?.message ||
@@ -463,22 +608,54 @@ const DealerBillsPage: React.FC = () => {
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (!selectedRowKeys.length) return;
+  const copyBillAsImage = async (bill: DealerBillRecord) => {
+    setExportBill(bill);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    if (!exportCardRef.current) {
+      message.error("Bill image is not ready yet");
+      return;
+    }
+
+    setCopyingImage(true);
 
     try {
-      await Promise.all(selectedRowKeys.map((id) => deleteDealerBill(String(id))));
-      if (activeBill && selectedRowKeys.includes(activeBill._id)) {
-        setActiveBill(null);
+      const canvas = await html2canvas(exportCardRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+      });
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, "image/png");
+      });
+
+      if (!blob) {
+        throw new Error("Failed to create image");
       }
-      message.success("Selected dealer bills deleted successfully");
-      await loadBills(searchText);
+
+      if (navigator.clipboard && "write" in navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new window.ClipboardItem({
+            [blob.type]: blob,
+          }),
+        ]);
+        message.success("Bill image copied to clipboard");
+        return;
+      }
+
+      const imageUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = imageUrl;
+      link.download = `dealer-bill-${getDealerBillSequence(data, bill)}.png`;
+      link.click();
+      URL.revokeObjectURL(imageUrl);
+      message.success("Image download started because clipboard image copy is not supported");
     } catch (err: any) {
-      message.error(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Failed to delete selected dealer bills",
-      );
+      message.error(err?.message || "Failed to copy bill image");
+    } finally {
+      setCopyingImage(false);
+      setExportBill(null);
     }
   };
 
@@ -519,7 +696,7 @@ const DealerBillsPage: React.FC = () => {
       key: "kattaCount",
       width: 90,
       align: "center",
-      render: (value: number) => value ?? 0,
+      render: (value?: number) => value ?? "-",
     },
     {
       title: "Total",
@@ -533,17 +710,29 @@ const DealerBillsPage: React.FC = () => {
       ),
     },
     {
-      title: "Created By",
-      key: "userId",
-      width: 180,
-      render: (_, record) => record.userId?.name || record.userId?.email || "-",
-    },
-    {
       title: "Actions",
       key: "actions",
       width: 120,
       render: (_, record) => (
         <Space size="small">
+          <Tooltip title="Copy bill image">
+            <Button
+              type="text"
+              aria-label="Copy bill image"
+              onClick={(event) => {
+                event.stopPropagation();
+                void copyBillAsImage(record);
+              }}
+              icon={<CopyOutlined />}
+              loading={copyingImage && exportBill?._id === record._id}
+              style={{
+                color: THEME.mid,
+                borderRadius: 10,
+                width: 36,
+                height: 36,
+              }}
+            />
+          </Tooltip>
           <Tooltip title="Edit bill">
             <Button
               type="text"
@@ -629,27 +818,13 @@ const DealerBillsPage: React.FC = () => {
               placeholder="Search dealer, city, date, product"
               style={{ width: 300 }}
             />
-            <Popconfirm
-              title="Delete selected bills"
-              description={`Are you sure you want to delete ${selectedRowKeys.length} selected bill${selectedRowKeys.length === 1 ? "" : "s"}?`}
-              okText="Delete"
-              okButtonProps={{ danger: true }}
-              onConfirm={handleBulkDelete}
-              disabled={!selectedRowKeys.length}
-            >
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                disabled={!selectedRowKeys.length}
-                style={{
-                  height: 42,
-                  paddingInline: 18,
-                  borderRadius: 12,
-                }}
-              >
-                Delete Selected
-              </Button>
-            </Popconfirm>
+            <RangePicker
+              allowClear
+              value={dateRange}
+              onChange={(value) => setDateRange(value)}
+              format="DD-MM-YYYY"
+              size="large"
+            />
             <Button
               onClick={openCreate}
               icon={<PlusOutlined />}
@@ -679,10 +854,6 @@ const DealerBillsPage: React.FC = () => {
             rowKey="_id"
             loading={loading}
             dataSource={data}
-            rowSelection={{
-              selectedRowKeys,
-              onChange: setSelectedRowKeys,
-            }}
             pagination={false}
             scroll={{ x: "max-content", y: 520 }}
             columns={columns}
@@ -801,13 +972,13 @@ const DealerBillsPage: React.FC = () => {
               <div>#</div>
               <div>MRP</div>
               <div>Product</div>
-              <div>Amount</div>
               <div>Qty</div>
+              <div>Amount</div>
               <div>Total</div>
             </div>
 
             <div style={{ maxHeight: 320, overflowY: "auto" }}>
-              {products.map((product, index) => {
+              {orderedProducts.map((product, index) => {
                 const quantity = Number(watchedItems?.[index]?.quantity || 0);
                 const amount = resolveLineAmount(
                   watchedItems?.[index]?.amount,
@@ -842,16 +1013,6 @@ const DealerBillsPage: React.FC = () => {
                     <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>
                       {product.productName}
                     </div>
-                    <Form.Item name={["items", index, "amount"]} style={{ marginBottom: 0 }}>
-                      <InputNumber
-                        min={0}
-                        precision={2}
-                        step={0.01}
-                        size="large"
-                        style={{ width: "100%" }}
-                        placeholder="Amount"
-                      />
-                    </Form.Item>
                     <Form.Item
                       name={["items", index, "quantity"]}
                       style={{ marginBottom: 0 }}
@@ -864,6 +1025,16 @@ const DealerBillsPage: React.FC = () => {
                         placeholder="Qty"
                       />
                     </Form.Item>
+                    <Form.Item name={["items", index, "amount"]} style={{ marginBottom: 0 }}>
+                      <InputNumber
+                        min={0}
+                        precision={2}
+                        step={0.01}
+                        size="large"
+                        style={{ width: "100%" }}
+                        placeholder="Amount"
+                      />
+                    </Form.Item>
                     <div style={{ fontSize: 16, fontWeight: 400, color: "#111827" }}>
                       {formatRoundedCurrency(lineTotal)}
                     </div>
@@ -874,7 +1045,7 @@ const DealerBillsPage: React.FC = () => {
           </div>
 
           <div style={{ display: "none" }}>
-            {products.map((product, index) => (
+            {orderedProducts.map((product, index) => (
               <React.Fragment key={product._id}>
                 <Form.Item
                   name={["items", index, "productId"]}
@@ -951,8 +1122,8 @@ const DealerBillsPage: React.FC = () => {
                         <tr>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>#</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Product</th>
-                          <th style={{ textAlign: "left", paddingRight: 8 }}>Amount</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Qty</th>
+                          <th style={{ textAlign: "left", paddingRight: 8 }}>Amount</th>
                           <th style={{ textAlign: "left", paddingRight: 8 }}>Total</th>
                           <th style={{ textAlign: "left" }}>Action</th>
                         </tr>
@@ -987,6 +1158,21 @@ const DealerBillsPage: React.FC = () => {
                                   />
                                 </Form.Item>
                               </td>
+                              <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 110 }}>
+                                <Form.Item
+                                  name={[field.name, "quantity"]}
+                                  rules={[{ required: true, message: "Enter qty" }]}
+                                  style={{ marginBottom: 0 }}
+                                >
+                                  <InputNumber
+                                    min={0}
+                                    precision={0}
+                                    size="large"
+                                    placeholder="Qty"
+                                    style={{ width: "100%" }}
+                                  />
+                                </Form.Item>
+                              </td>
                               <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 130 }}>
                                 <Form.Item
                                   name={[field.name, "amount"]}
@@ -999,21 +1185,6 @@ const DealerBillsPage: React.FC = () => {
                                     step={0.01}
                                     size="large"
                                     placeholder="Amount"
-                                    style={{ width: "100%" }}
-                                  />
-                                </Form.Item>
-                              </td>
-                              <td style={{ paddingRight: 8, verticalAlign: "top", minWidth: 110 }}>
-                                <Form.Item
-                                  name={[field.name, "quantity"]}
-                                  rules={[{ required: true, message: "Enter qty" }]}
-                                  style={{ marginBottom: 0 }}
-                                >
-                                  <InputNumber
-                                    min={0}
-                                    precision={0}
-                                    size="large"
-                                    placeholder="Qty"
                                     style={{ width: "100%" }}
                                   />
                                 </Form.Item>
@@ -1082,11 +1253,21 @@ const DealerBillsPage: React.FC = () => {
             <Form.Item
               label="Katta"
               name="kattaCount"
-              rules={[{ required: true, message: "Please enter katta" }]}
+              rules={[
+                { required: true, message: "Please enter katta" },
+                {
+                  validator: (_, value) =>
+                    value === undefined || value === null || value === ""
+                      ? Promise.resolve()
+                      : Number(value) > 0
+                        ? Promise.resolve()
+                        : Promise.reject(new Error("Please enter katta greater than 0")),
+                },
+              ]}
               style={{ marginBottom: 0 }}
             >
               <InputNumber
-                min={0}
+                min={1}
                 precision={0}
                 size="large"
                 placeholder="Enter katta"
@@ -1192,7 +1373,7 @@ const DealerBillsPage: React.FC = () => {
                       ? record.productId?._id
                       : record.productId) || `custom-${index}`
                   }
-                  dataSource={activeBill.items || []}
+                  dataSource={orderedActiveBillItems}
                   pagination={false}
                   locale={{ emptyText: "No bill items found" }}
                   scroll={{ x: "max-content" }}
@@ -1222,6 +1403,13 @@ const DealerBillsPage: React.FC = () => {
                       render: (_, record) => record.productName || "-",
                     },
                     {
+                      title: "Qty",
+                      dataIndex: "quantity",
+                      key: "quantity",
+                      render: (value) => value ?? 0,
+                      width: 110,
+                    },
+                    {
                       title: "Amount",
                       key: "amount",
                       render: (_, record) => {
@@ -1240,13 +1428,6 @@ const DealerBillsPage: React.FC = () => {
                         return formatRoundedCurrency(amount);
                       },
                       width: 130,
-                    },
-                    {
-                      title: "Qty",
-                      dataIndex: "quantity",
-                      key: "quantity",
-                      render: (value) => value ?? 0,
-                      width: 110,
                     },
                     {
                       title: "Total",
@@ -1292,7 +1473,7 @@ const DealerBillsPage: React.FC = () => {
                     background: "rgba(185, 28, 28, 0.05)",
                   }}
                 >
-                  <Text strong>Katta : {activeBill.kattaCount ?? 0}</Text>
+                  <Text strong>Katta : {activeBill.kattaCount ?? "-"}</Text>
                 </div>
 
                 <div
@@ -1309,9 +1490,221 @@ const DealerBillsPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
           </Space>
         ) : null}
       </Modal>
+
+      {exportBill ? (
+        <div
+          style={{
+            position: "fixed",
+            left: -10000,
+            top: 0,
+            pointerEvents: "none",
+            opacity: 0,
+          }}
+        >
+          <div
+            ref={exportCardRef}
+            style={{
+              width: 920,
+              background: "#ffffff",
+              color: "#111111",
+              fontFamily:
+                "\"Segoe UI\", Tahoma, Geneva, Verdana, sans-serif",
+              border: "1px solid #d9d9d9",
+              boxSizing: "border-box",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.4fr 1fr",
+                borderBottom: "1px solid #d9d9d9",
+              }}
+            >
+              <div
+                style={{
+                  padding: "16px 18px",
+                  borderRight: "1px solid #d9d9d9",
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                DEALER NAME : {exportBill.dealerId?.dealerName || "-"}
+              </div>
+              <div
+                style={{
+                  padding: "16px 18px",
+                  fontSize: 20,
+                  fontWeight: 500,
+                  textAlign: "right",
+                }}
+              >
+                DATE : {formatExportDate(exportBill.billDate)}
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: "14px 18px",
+                borderBottom: "1px solid #d9d9d9",
+                fontSize: 20,
+                fontWeight: 500,
+              }}
+            >
+              KATTA : {exportBill.kattaCount ?? "-"}
+            </div>
+
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                tableLayout: "fixed",
+              }}
+            >
+              <thead>
+                <tr>
+                  {["#", "M.R.P.", "PRODUCT", "QTY", "AMT", "TOTAL"].map((label) => (
+                    <th
+                      key={label}
+                      style={{
+                        borderBottom: "1px solid #d9d9d9",
+                        borderRight: "1px solid #d9d9d9",
+                        padding: "12px 10px",
+                        fontSize: 18,
+                        fontWeight: 500,
+                        textAlign: label === "PRODUCT" ? "left" : "center",
+                      }}
+                    >
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {orderedExportBillItems.map((item, index) => {
+                  const itemProductId =
+                    typeof item.productId === "object"
+                      ? item.productId?._id
+                      : item.productId;
+                  const amount = itemProductId
+                    ? resolveLineAmount(
+                        item.amount,
+                        item.productRate,
+                        exportBill.dealerId?.margin,
+                      )
+                    : resolveCustomAmount(item.amount, item.productRate);
+                  const total = item.total ?? Number(item.quantity || 0) * amount;
+
+                  return (
+                    <tr key={`${itemProductId || item.productName || "custom"}-${index}`}>
+                      <td
+                        style={{
+                          borderBottom: "1px solid #ebebeb",
+                          borderRight: "1px solid #d9d9d9",
+                          padding: "10px 8px",
+                          fontSize: 18,
+                          textAlign: "center",
+                        }}
+                      >
+                        {index + 1}
+                      </td>
+                      <td
+                        style={{
+                          borderBottom: "1px solid #ebebeb",
+                          borderRight: "1px solid #d9d9d9",
+                          padding: "10px 8px",
+                          fontSize: 18,
+                          textAlign: "center",
+                        }}
+                      >
+                        {formatRoundedCurrency(Number(item.mrp || 0))}
+                      </td>
+                      <td
+                        style={{
+                          borderBottom: "1px solid #ebebeb",
+                          borderRight: "1px solid #d9d9d9",
+                          padding: "10px 18px",
+                          fontSize: 18,
+                          textAlign: "left",
+                        }}
+                      >
+                        {String(item.productName || "-").toUpperCase()}
+                      </td>
+                      <td
+                        style={{
+                          borderBottom: "1px solid #ebebeb",
+                          borderRight: "1px solid #d9d9d9",
+                          padding: "10px 8px",
+                          fontSize: 18,
+                          textAlign: "center",
+                        }}
+                      >
+                        {Number(item.quantity || 0)}
+                      </td>
+                      <td
+                        style={{
+                          borderBottom: "1px solid #ebebeb",
+                          borderRight: "1px solid #d9d9d9",
+                          padding: "10px 8px",
+                          fontSize: 18,
+                          textAlign: "center",
+                        }}
+                      >
+                        {formatRoundedCurrency(amount)}
+                      </td>
+                      <td
+                        style={{
+                          borderBottom: "1px solid #ebebeb",
+                          padding: "10px 8px",
+                          fontSize: 18,
+                          textAlign: "center",
+                        }}
+                      >
+                        {formatRoundedCurrency(total)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                gap: 18,
+                padding: "18px",
+                borderTop: "1px solid #d9d9d9",
+                fontSize: 20,
+              }}
+            >
+              <span style={{ fontWeight: 500 }}>TOTAL AMOUNT</span>
+              <span style={{ minWidth: 120, textAlign: "right" }}>
+                {formatRoundedCurrency(Number(exportBill.totalAmount || 0))}
+              </span>
+            </div>
+
+            <div
+              style={{
+                borderTop: "1px solid #d9d9d9",
+                padding: "18px",
+                display: "grid",
+                gap: 10,
+                fontSize: 18,
+                lineHeight: 1.5,
+              }}
+            >
+              {EXPORT_FOOTER_LINES.map((line) => (
+                <div key={line}>{line}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

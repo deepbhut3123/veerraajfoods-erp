@@ -18,14 +18,17 @@ import type { ColumnsType } from "antd/es/table";
 import {
   DeleteOutlined,
   EditOutlined,
+  HolderOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
 import {
   addDealerProduct,
   deleteDealerProduct,
   getAllDealerProducts,
+  reorderDealerProducts,
   updateDealerProduct,
 } from "../../Utils/Api";
+import "../Products/Index.css";
 
 const { Title } = Typography;
 const THEME = {
@@ -38,6 +41,7 @@ type DealerProductItem = {
   mrp: number;
   productName: string;
   productRate: number;
+  sequence?: number;
   createdAt?: string;
   userId?: {
     name?: string;
@@ -67,6 +71,7 @@ const DealerProductsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<DealerProductItem | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [form] = Form.useForm<DealerProductFormValues>();
 
   const loadProducts = async (search = "") => {
@@ -176,13 +181,66 @@ const DealerProductsPage: React.FC = () => {
     }
   };
 
+  const handleReorder = async (draggedId: string, targetId: string) => {
+    if (!draggedId || draggedId === targetId || searchText.trim()) {
+      return;
+    }
+
+    const previousData = [...data];
+    const draggedIndex = previousData.findIndex((item) => item._id === draggedId);
+    const targetIndex = previousData.findIndex((item) => item._id === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      return;
+    }
+
+    const reordered = [...previousData];
+    const [draggedItem] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, draggedItem);
+
+    const sequenced = reordered.map((item, index) => ({
+      ...item,
+      sequence: index + 1,
+    }));
+
+    setData(sequenced);
+
+    try {
+      await reorderDealerProducts(sequenced.map((item) => item._id));
+      message.success("Dealer product sequence updated");
+      await loadProducts(searchText);
+    } catch (err: any) {
+      setData(previousData);
+      message.error(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Failed to update dealer product sequence",
+      );
+    }
+  };
+
   const columns: ColumnsType<DealerProductItem> = [
     {
+      title: "",
+      key: "drag",
+      width: 56,
+      align: "center",
+      render: () => (
+        <span
+          className="product-drag-handle"
+          aria-label="Drag to reorder dealer product"
+        >
+          <HolderOutlined />
+        </span>
+      ),
+    },
+    {
       title: "#",
-      key: "serialNumber",
+      dataIndex: "sequence",
+      key: "sequence",
       width: 90,
       align: "center",
-      render: (_, __, index) => index + 1,
+      render: (value: number | undefined, _, index) => value ?? index + 1,
     },
     {
       title: "MRP",
@@ -202,12 +260,6 @@ const DealerProductsPage: React.FC = () => {
       key: "productRate",
       width: 140,
       render: (value: number) => formatCurrency(value),
-    },
-    {
-      title: "Created By",
-      key: "userId",
-      width: 180,
-      render: (_, record) => record.userId?.name || record.userId?.email || "-",
     },
     {
       title: "Actions",
@@ -287,6 +339,11 @@ const DealerProductsPage: React.FC = () => {
             <Title level={3} style={{ marginBottom: 4, color: THEME.dark }}>
               Dealer Products
             </Title>
+            <Typography.Text style={{ color: "#64748b" }}>
+              {searchText.trim()
+                ? "Clear search to drag rows and change saved dealer product sequence."
+                : "Drag rows to change saved dealer product sequence."}
+            </Typography.Text>
           </div>
           <Space wrap>
             <Input.Search
@@ -353,6 +410,39 @@ const DealerProductsPage: React.FC = () => {
             pagination={false}
             scroll={{ x: "max-content", y: 520 }}
             columns={columns}
+            rowClassName={(record) =>
+              record._id === draggingId ? "product-row product-row-dragging" : "product-row"
+            }
+            onRow={(record) => ({
+              draggable: !searchText.trim(),
+              onDragStart: (event) => {
+                if (searchText.trim()) {
+                  return;
+                }
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", record._id);
+                setDraggingId(record._id);
+              },
+              onDragOver: (event) => {
+                if (searchText.trim()) {
+                  return;
+                }
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              },
+              onDrop: (event) => {
+                if (searchText.trim()) {
+                  return;
+                }
+                event.preventDefault();
+                const draggedProductId = event.dataTransfer.getData("text/plain");
+                setDraggingId(null);
+                void handleReorder(draggedProductId, record._id);
+              },
+              onDragEnd: () => {
+                setDraggingId(null);
+              },
+            })}
           />
         )}
       </Card>

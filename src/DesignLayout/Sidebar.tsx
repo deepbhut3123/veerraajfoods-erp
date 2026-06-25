@@ -3,9 +3,11 @@ import { Drawer, Layout, Menu } from "antd";
 import type { MenuProps } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  AuditOutlined,
   AppstoreOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  DollarCircleOutlined,
   FileTextOutlined,
   ShopOutlined,
   SnippetsOutlined,
@@ -93,6 +95,18 @@ const MENU_ITEMS: SidebarMenuItem[] = [
         text: "Bills",
         link: "/dealer-bills",
       },
+      {
+        key: "dealer-payments",
+        icon: <DollarCircleOutlined style={{ color: "inherit" }} />,
+        text: "Payments",
+        link: "/dealer-payments",
+      },
+      {
+        key: "dealer-statement",
+        icon: <AuditOutlined style={{ color: "inherit" }} />,
+        text: "Statement",
+        link: "/dealer-statement",
+      },
     ],
   },
   {
@@ -179,6 +193,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       "/dealers": "Dealers",
       "/dealer-products": "Dealer Products",
       "/dealer-bills": "Dealer Bills",
+      "/dealer-payments": "Dealer Payments",
+      "/dealer-statement": "Dealer Statement",
       "/users": "Users",
     };
 
@@ -227,6 +243,10 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const toggleCollapse = () => {
     onCollapse(!collapsed);
+  };
+
+  const handleLogoClick = () => {
+    window.location.reload();
   };
 
   const menuItems: MenuProps["items"] = useMemo(
@@ -336,7 +356,12 @@ const Sidebar: React.FC<SidebarProps> = ({
               justifyContent: "center",
             }}
           >
-            <img src={Logo_Main} alt="logo" style={{ maxHeight: "8vw" }} />
+            <img
+              src={Logo_Main}
+              alt="logo"
+              onClick={handleLogoClick}
+              style={{ maxHeight: "8vw", cursor: "pointer" }}
+            />
           </div>
           <Menu
             mode="inline"
@@ -380,10 +405,12 @@ const Sidebar: React.FC<SidebarProps> = ({
             <img
               src={Logo_Main}
               alt="logo"
+              onClick={handleLogoClick}
               style={{
                 maxHeight: "70px",
                 transition: "all 0.2s",
                 width: collapsed ? "60px" : "auto",
+                cursor: "pointer",
               }}
             />
           </div>

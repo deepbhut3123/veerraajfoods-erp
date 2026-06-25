@@ -2,7 +2,9 @@ import Dashboard from "./DesignLayout/Dashboard";
 import BillsPage from "./Pages/Bills/Index";
 import DealerBillsPage from "./Pages/DealerBills/Index";
 import DealerPage from "./Pages/DealerManagement/Index";
+import DealerPaymentsPage from "./Pages/DealerPayments/Index";
 import DealerProductsPage from "./Pages/DealerProducts/Index";
+import DealerStatementPage from "./Pages/DealerStatement/Index";
 import RoutesPage from "./Pages/Routes/Index";
 import ShopsPage from "./Pages/Shops/Index";
 import ProductsPage from "./Pages/Products/Index";
@@ -48,6 +50,16 @@ const AdminRoutes = [
     path: "/dealer-bills",
     name: "Dealer Bills",
     component: DealerBillsPage,
+  },
+  {
+    path: "/dealer-payments",
+    name: "Dealer Payments",
+    component: DealerPaymentsPage,
+  },
+  {
+    path: "/dealer-statement",
+    name: "Dealer Statement",
+    component: DealerStatementPage,
   },
   {
     path: "/users",

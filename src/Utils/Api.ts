@@ -410,8 +410,18 @@ export const deleteDealerProduct = async (id: string) => {
   }
 };
 
+export const reorderDealerProducts = async (productIds: string[]) => {
+  try {
+    const response = await API.patch("/admin/dealer/products/reorder", { productIds });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const getAllDealerBills = async (params?: {
   search?: string;
+  dealerId?: string;
   month?: number;
   year?: number;
   fromDate?: string;
@@ -473,6 +483,60 @@ export const updateDealerBill = async (
 export const deleteDealerBill = async (id: string) => {
   try {
     const response = await API.delete(`/admin/dealer/bills/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllDealerPayments = async (params?: {
+  search?: string;
+  dealerId?: string;
+  fromDate?: string;
+  toDate?: string;
+}) => {
+  try {
+    const response = await API.get("/admin/dealer/payments", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const addDealerPayment = async (data: {
+  paymentDate: string;
+  dealerId: string;
+  amount: number;
+  paymentType: "cash" | "online" | "bank";
+}) => {
+  try {
+    const response = await API.post("/admin/dealer/payments", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateDealerPayment = async (
+  id: string,
+  data: {
+    paymentDate: string;
+    dealerId: string;
+    amount: number;
+    paymentType: "cash" | "online" | "bank";
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/dealer/payments/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteDealerPayment = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/dealer/payments/${id}`);
     return response.data;
   } catch (error) {
     throw error;

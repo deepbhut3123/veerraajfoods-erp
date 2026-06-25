@@ -24,7 +24,6 @@ import {
 } from "@ant-design/icons";
 import {
   addAdminBill,
-  bulkDeleteAdminBills,
   deleteAdminBill,
   getAllAdminBills,
   getAllAdminRoutes,
@@ -282,7 +281,6 @@ const BillsPage: React.FC = () => {
   const [activeBill, setActiveBill] = useState<BillItem | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<BillItem | null>(null);
@@ -462,35 +460,6 @@ const BillsPage: React.FC = () => {
       message.error(
         err?.response?.data?.message || err?.message || "Failed to delete bill",
       );
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    const billIds = selectedRowKeys.map(String).filter(Boolean);
-
-    if (!billIds.length) {
-      message.warning("Select at least one bill to delete");
-      return;
-    }
-
-    setBulkDeleting(true);
-    try {
-      await bulkDeleteAdminBills(billIds);
-      message.success("Selected bills deleted successfully");
-      setSelectedRowKeys([]);
-      if (activeBill) {
-        const activeId = activeBill._id || activeBill.id || "";
-        if (billIds.includes(activeId)) {
-          setActiveBill(null);
-        }
-      }
-      await loadBills();
-    } catch (err: any) {
-      message.error(
-        err?.response?.data?.message || err?.message || "Failed to delete selected bills",
-      );
-    } finally {
-      setBulkDeleting(false);
     }
   };
 
@@ -727,12 +696,6 @@ const BillsPage: React.FC = () => {
           : "-",
     },
     {
-      title: "Created By",
-      key: "createdBy",
-      width: 220,
-      render: (_, record) => record.userId?.name || record.userId?.email || "-",
-    },
-    {
       title: "Status",
       key: "status",
       render: (_, record) => {
@@ -916,33 +879,6 @@ const BillsPage: React.FC = () => {
             >
               Generate Summary
             </Button>
-            <Popconfirm
-              title="Delete selected bills"
-              description="Are you sure you want to delete all selected bills?"
-              okText="Yes"
-              cancelText="No"
-              okButtonProps={{ danger: true, loading: bulkDeleting }}
-              onConfirm={handleBulkDelete}
-              disabled={!selectedRowKeys.length}
-            >
-              <Tooltip title="Delete selected bills">
-                <Button
-                  danger
-                  aria-label="Delete selected bills"
-                  icon={<DeleteOutlined />}
-                  disabled={!selectedRowKeys.length}
-                  loading={bulkDeleting}
-                  style={{
-                    height: 42,
-                    width: 42,
-                    minWidth: 42,
-                    paddingInline: 0,
-                    borderRadius: 12,
-                    fontWeight: 600,
-                  }}
-                />
-              </Tooltip>
-            </Popconfirm>
             <Tooltip title="Add bill">
               <Button
                 onClick={openCreate}
