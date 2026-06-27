@@ -28,6 +28,7 @@ import {
   updateUser,
   updateUserActiveStatus,
 } from "../../Utils/Api";
+import { getRoleMeta, ROLE_OPTIONS } from "../../Utils/roles";
 import "./Index.css";
 
 const { Title, Text } = Typography;
@@ -56,12 +57,6 @@ const THEME = {
   mid: "#00695C",
 };
 
-const ROLE_OPTIONS = [
-  { value: 1, label: "Admin" },
-  { value: 2, label: "Retailer" },
-  { value: 3, label: "Dealer" },
-];
-
 const statusMeta = (isActive: boolean) =>
   isActive
     ? {
@@ -74,42 +69,6 @@ const statusMeta = (isActive: boolean) =>
         color: "#64748b",
         background: "rgba(100, 116, 139, 0.08)",
       };
-
-const roleMeta = (roleId?: number) => {
-  if (roleId === 1) {
-    return {
-      label: "Admin",
-      color: "#0f766e",
-      background: "rgba(0, 105, 92, 0.08)",
-      border: "rgba(0, 105, 92, 0.18)",
-    };
-  }
-
-  if (roleId === 2) {
-    return {
-      label: "Retailer",
-      color: "#7c3aed",
-      background: "rgba(124, 58, 237, 0.12)",
-      border: "rgba(124, 58, 237, 0.2)",
-    };
-  }
-
-  if (roleId === 3) {
-    return {
-      label: "Dealer",
-      color: "#1d4ed8",
-      background: "rgba(59, 130, 246, 0.12)",
-      border: "rgba(59, 130, 246, 0.2)",
-    };
-  }
-
-  return {
-    label: `Role ${roleId ?? "-"}`,
-    color: "#475569",
-    background: "rgba(148, 163, 184, 0.12)",
-    border: "rgba(148, 163, 184, 0.2)",
-  };
-};
 
 const UsersPage: React.FC = () => {
   const [data, setData] = useState<UserItem[]>([]);
@@ -239,7 +198,7 @@ const UsersPage: React.FC = () => {
       title: "Role",
       key: "roleId",
       render: (_, record) => {
-        const meta = roleMeta(record.roleId);
+        const meta = getRoleMeta(record.roleId);
 
         return (
           <Tag
