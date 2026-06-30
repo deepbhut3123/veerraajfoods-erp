@@ -1,19 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import dayjs, { type Dayjs } from "dayjs";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import {
   Alert,
   Button,
   Card,
   DatePicker,
   Empty,
+  Modal,
   message,
   Select,
   Space,
   Spin,
   Table,
-  Tag,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -37,15 +36,32 @@ type DealerOption = {
 };
 
 type DealerBillLineItem = {
+  productId?: string | { _id?: string; mrp?: number } | null;
   productName?: string;
+  mrp?: number;
+  productRate?: number;
+  amount?: number;
   quantity?: number;
+  total?: number;
 };
 
 type DealerBillRecord = {
   _id: string;
   billDate?: string;
+  kattaCount?: number;
   totalAmount?: number;
   items?: DealerBillLineItem[];
+  dealerId?: {
+    _id?: string;
+    dealerName?: string;
+    contactNo?: string;
+    city?: string;
+    margin?: number;
+  };
+  userId?: {
+    name?: string;
+    email?: string;
+  };
 };
 
 type DealerPaymentRecord = {
@@ -65,6 +81,7 @@ type StatementRow = {
   paymentAmount: number;
   balance: number;
   paymentType?: string;
+  sourceBill?: DealerBillRecord;
 };
 
 const formatAmount = (value?: number) =>
@@ -75,24 +92,30 @@ const formatAmount = (value?: number) =>
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
 
+const formatPdfAmount = (value?: number) =>
+  new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+
+const formatRoundedAmount = (value?: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(Number(value || 0)));
+
+const formatRoundedPdfAmount = (value?: number) =>
+  new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(Number(value || 0)));
+
 const formatDate = (value?: string) => {
   if (!value) return "-";
   const parsed = dayjs(value);
   return parsed.isValid() ? parsed.format("DD-MM-YYYY") : "-";
-};
-
-const getPaymentTypeTone = (value?: string) => {
-  const normalized = String(value || "").toLowerCase();
-
-  if (normalized === "bank") {
-    return { color: "#1d4ed8", background: "rgba(59, 130, 246, 0.12)" };
-  }
-
-  if (normalized === "online") {
-    return { color: "#7c3aed", background: "rgba(124, 58, 237, 0.12)" };
-  }
-
-  return { color: "#0f766e", background: "rgba(15, 118, 110, 0.12)" };
 };
 
 const getBillProductsLabel = (items?: DealerBillLineItem[]) => {
@@ -109,6 +132,50 @@ const getBillProductsLabel = (items?: DealerBillLineItem[]) => {
     .join(", ");
 };
 
+const getPaymentLabel = (paymentType?: string) => {
+  const normalized = String(paymentType || "").trim().toLowerCase();
+
+  if (normalized === "online") return "Online Payment Received";
+  if (normalized === "bank") return "Bank Payment Received";
+  if (normalized === "cash") return "Cash Payment Received";
+
+  return "Payment Received";
+};
+
+const resolveLineAmount = (amount?: number, rate?: number, margin?: number) => {
+  const normalizedAmount = Number(amount);
+
+  if (Number.isFinite(normalizedAmount) && normalizedAmount >= 0) {
+    return normalizedAmount;
+  }
+
+  const normalizedRate = Number(rate || 0);
+  const normalizedMargin = Number(margin || 0);
+  const divisor = 100 + normalizedMargin;
+
+  if (!Number.isFinite(normalizedRate) || !Number.isFinite(normalizedMargin) || divisor <= 0) {
+    return 0;
+  }
+
+  return (normalizedRate * 100) / divisor;
+};
+
+const resolveCustomAmount = (amount?: number, productRate?: number) => {
+  const normalizedAmount = Number(amount);
+
+  if (Number.isFinite(normalizedAmount) && normalizedAmount >= 0) {
+    return normalizedAmount;
+  }
+
+  const normalizedRate = Number(productRate);
+  return Number.isFinite(normalizedRate) && normalizedRate >= 0 ? normalizedRate : 0;
+};
+
+const getDealerBillSequence = (
+  records: DealerBillRecord[],
+  record: DealerBillRecord,
+) => records.findIndex((item) => item._id === record._id) + 1;
+
 const DealerStatementPage: React.FC = () => {
   const [dealers, setDealers] = useState<DealerOption[]>([]);
   const [selectedDealerId, setSelectedDealerId] = useState<string>();
@@ -118,6 +185,7 @@ const DealerStatementPage: React.FC = () => {
   const [error, setError] = useState("");
   const [bills, setBills] = useState<DealerBillRecord[]>([]);
   const [payments, setPayments] = useState<DealerPaymentRecord[]>([]);
+  const [activeBill, setActiveBill] = useState<DealerBillRecord | null>(null);
 
   useEffect(() => {
     const loadDealers = async () => {
@@ -213,15 +281,17 @@ const DealerStatementPage: React.FC = () => {
         billAmount: Number(bill.totalAmount || 0),
         paymentAmount: 0,
         paymentType: undefined,
+        sourceBill: bill,
       })),
       ...payments.map((payment) => ({
         key: `payment-${payment._id}`,
         dateValue: payment.paymentDate || "",
         entryType: "payment" as const,
-        product: "Payment received",
+        product: getPaymentLabel(payment.paymentType),
         billAmount: 0,
         paymentAmount: Number(payment.amount || 0),
         paymentType: payment.paymentType,
+        sourceBill: undefined,
       })),
     ]
       .filter((item) => dayjs(item.dateValue).isValid())
@@ -277,13 +347,21 @@ const DealerStatementPage: React.FC = () => {
   );
   const closingBalance = totalBillAmount - totalPaymentAmount;
 
+  const orderedActiveBillItems = useMemo(() => {
+    if (!activeBill?.items?.length) {
+      return [];
+    }
+
+    return [...activeBill.items];
+  }, [activeBill]);
+
   const handleDownloadPdf = () => {
     if (!selectedDealer || !dateRange?.[0] || !dateRange?.[1]) {
       message.warning("Select date range and dealer first");
       return;
     }
 
-    const dateRangeLabel = `${dateRange[0].format("DD-MM-YYYY")} to ${dateRange[1].format("DD-MM-YYYY")}`;
+    const dateRangeLabel = `${dateRange[0].format("DD-MM-YYYY")} TO ${dateRange[1].format("DD-MM-YYYY")}`;
     const doc = new jsPDF({
       orientation: "portrait",
       unit: "pt",
@@ -291,154 +369,351 @@ const DealerStatementPage: React.FC = () => {
     });
 
     const pageWidth = doc.internal.pageSize.getWidth();
-    const marginX = 34;
-    let cursorY = 36;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 12;
+    const marginTop = 12;
+    const contentWidth = pageWidth - marginX * 2;
+    const orderedBillsForPdf = [...bills]
+      .filter((bill) => dayjs(bill.billDate).isValid())
+      .sort((left, right) => {
+        const dateDifference = dayjs(left.billDate).valueOf() - dayjs(right.billDate).valueOf();
 
-    doc.setFillColor(240, 249, 247);
-    doc.setDrawColor(214, 233, 229);
-    doc.roundedRect(marginX, cursorY, pageWidth - marginX * 2, 92, 14, 14, "FD");
+        if (dateDifference !== 0) {
+          return dateDifference;
+        }
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(0, 77, 64);
-    doc.text("Dealer Statement", marginX + 18, cursorY + 28);
+        return getDealerBillSequence(bills, left) - getDealerBillSequence(bills, right);
+      });
+    const statementRowsForPdf = [
+      ...bills.map((bill) => ({
+        dateValue: bill.billDate || "",
+        dateLabel: formatDate(bill.billDate),
+        billNo: String(getDealerBillSequence(bills, bill)),
+        billAmount: Number(bill.totalAmount || 0),
+        receivedAmount: 0,
+      })),
+      ...payments.map((payment) => ({
+        dateValue: payment.paymentDate || "",
+        dateLabel: formatDate(payment.paymentDate),
+        billNo: "",
+        billAmount: 0,
+        receivedAmount: Number(payment.amount || 0),
+      })),
+    ]
+      .filter((item) => dayjs(item.dateValue).isValid())
+      .sort((left, right) => dayjs(left.dateValue).valueOf() - dayjs(right.dateValue).valueOf());
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Dealer: ${selectedDealer.dealerName}`, marginX + 18, cursorY + 50);
-    doc.text(`Contact: ${selectedDealer.contactNo || "-"}`, marginX + 18, cursorY + 66);
-    doc.text(`City: ${selectedDealer.city || "-"}`, marginX + 18, cursorY + 82);
-    doc.text(`Period: ${dateRangeLabel}`, pageWidth - marginX - 18, cursorY + 50, { align: "right" });
+    const borderColor: [number, number, number] = [0, 0, 0];
+    const rowHeight = 18;
+    const blockGapX = 10;
+    const blockGapY = 12;
+    const blockWidth = (contentWidth - blockGapX) / 2;
+    const blockInnerWidths = {
+      mrp: blockWidth * 0.18,
+      product: blockWidth * 0.38,
+      qty: blockWidth * 0.1,
+      rate: blockWidth * 0.15,
+      amt: blockWidth * 0.19,
+    };
+    const summaryWidths = {
+      date: contentWidth * 0.24,
+      bill: contentWidth * 0.35,
+      received: contentWidth * 0.41,
+    };
 
-    cursorY += 112;
+    const getCellTextMetrics = (
+      value: string,
+      width: number,
+      fontSize: number,
+      bold?: boolean,
+      minFontSize = 5.2,
+    ) => {
+      const normalized = String(value || "");
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      let adjustedFontSize = fontSize;
+      doc.setFontSize(adjustedFontSize);
 
-    const summaryCards = [
-      {
-        label: "Total Bills",
-        value: formatAmount(totalBillAmount),
-        fill: [236, 253, 245] as [number, number, number],
-        border: [187, 247, 208] as [number, number, number],
-        text: [4, 120, 87] as [number, number, number],
+      while (adjustedFontSize > minFontSize && doc.getTextWidth(normalized) > width) {
+        adjustedFontSize -= 0.2;
+        doc.setFontSize(adjustedFontSize);
+      }
+
+      return {
+        text: normalized,
+        fontSize: adjustedFontSize,
+      };
+    };
+
+    const drawCell = (
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      text: string,
+      options?: {
+        align?: "left" | "center" | "right";
+        bold?: boolean;
+        textColor?: [number, number, number];
+        fillColor?: [number, number, number];
+        fontSize?: number;
+        minFontSize?: number;
       },
-      {
-        label: "Total Payments",
-        value: formatAmount(totalPaymentAmount),
-        fill: [239, 246, 255] as [number, number, number],
-        border: [191, 219, 254] as [number, number, number],
-        text: [29, 78, 216] as [number, number, number],
-      },
-      {
-        label: "Closing Balance",
-        value: formatAmount(closingBalance),
-        fill:
-          closingBalance > 0
-            ? ([255, 247, 237] as [number, number, number])
-            : ([236, 253, 245] as [number, number, number]),
-        border:
-          closingBalance > 0
-            ? ([254, 215, 170] as [number, number, number])
-            : ([187, 247, 208] as [number, number, number]),
-        text:
-          closingBalance > 0
-            ? ([194, 65, 12] as [number, number, number])
-            : ([4, 120, 87] as [number, number, number]),
-      },
-    ];
+    ) => {
+      doc.setDrawColor(...borderColor);
+      doc.setLineWidth(0.8);
+      if (options?.fillColor) {
+        doc.setFillColor(...options.fillColor);
+        doc.rect(x, y, width, height, "FD");
+      } else {
+        doc.rect(x, y, width, height);
+      }
 
-    const cardGap = 12;
-    const cardWidth = (pageWidth - marginX * 2 - cardGap * 2) / 3;
+      doc.setFont("helvetica", options?.bold ? "bold" : "normal");
+      doc.setTextColor(...(options?.textColor || borderColor));
+      const textMetrics = getCellTextMetrics(
+        String(text || ""),
+        Math.max(width - 10, 4),
+        options?.fontSize || 8.4,
+        options?.bold,
+        options?.minFontSize,
+      );
+      doc.setFontSize(textMetrics.fontSize);
 
-    summaryCards.forEach((card, index) => {
-      const x = marginX + index * (cardWidth + cardGap);
-      doc.setFillColor(...card.fill);
-      doc.setDrawColor(...card.border);
-      doc.roundedRect(x, cursorY, cardWidth, 54, 12, 12, "FD");
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9.5);
-      doc.setTextColor(100, 116, 139);
-      doc.text(card.label, x + 14, cursorY + 18);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(15);
-      doc.setTextColor(...card.text);
-      doc.text(card.value, x + 14, cursorY + 38);
-    });
+      const align = options?.align || "center";
+      const textX =
+        align === "left"
+          ? x + 5
+          : align === "right"
+            ? x + width - 5
+            : x + width / 2;
 
-    cursorY += 72;
+      doc.text(textMetrics.text, textX, y + height / 2 + 3, {
+        align,
+      });
+    };
 
-    const bodyRows = statementRows.length
-      ? statementRows.map((row) => [
+    const getBillBlockHeight = (bill: DealerBillRecord) => {
+      const itemsCount = Math.max(bill.items?.length || 0, 1);
+      return rowHeight * (itemsCount + 3);
+    };
+
+    const drawFirstPageHeader = () => {
+      const startX = marginX + 8;
+      const tableWidth = contentWidth - 16;
+      let cursorY = marginTop + 8;
+
+      drawCell(startX, cursorY, tableWidth, rowHeight + 2, selectedDealer.dealerName || "-", {
+        fontSize: 9.4,
+      });
+      cursorY += rowHeight + 2;
+
+      drawCell(startX, cursorY, tableWidth, rowHeight + 2, dateRangeLabel, {
+        fontSize: 9.4,
+      });
+    };
+
+    const drawBillBlock = (bill: DealerBillRecord, x: number, y: number) => {
+      let cursorY = y;
+      const items = (bill.items?.length
+        ? bill.items
+        : [{ productName: "-", quantity: 0, amount: 0, total: 0 } as DealerBillLineItem]
+      );
+
+      const topLabelWidth = blockWidth * 0.26;
+      const topValueWidth = blockWidth * 0.34;
+      const topLabelWidthRight = blockWidth * 0.22;
+      const topValueWidthRight = blockWidth - topLabelWidth - topValueWidth - topLabelWidthRight;
+
+      drawCell(x, cursorY, topLabelWidth, rowHeight, "DATE", { bold: false, fontSize: 8.1 });
+      drawCell(x + topLabelWidth, cursorY, topValueWidth, rowHeight, formatDate(bill.billDate), {
+        bold: true,
+        fontSize: 8.1,
+      });
+      drawCell(x + topLabelWidth + topValueWidth, cursorY, topLabelWidthRight, rowHeight, "KATTA", {
+        fontSize: 8.1,
+      });
+      drawCell(x + topLabelWidth + topValueWidth + topLabelWidthRight, cursorY, topValueWidthRight, rowHeight, String(bill.kattaCount ?? "-"), {
+        bold: true,
+        fontSize: 8.1,
+      });
+
+      cursorY += rowHeight + 3;
+
+      drawCell(x, cursorY, blockInnerWidths.mrp, rowHeight, "MRP", { fontSize: 8.1 });
+      drawCell(x + blockInnerWidths.mrp, cursorY, blockInnerWidths.product, rowHeight, "PRODUCT", { fontSize: 8.1 });
+      drawCell(x + blockInnerWidths.mrp + blockInnerWidths.product, cursorY, blockInnerWidths.qty, rowHeight, "QTY", { fontSize: 8.1 });
+      drawCell(
+        x + blockInnerWidths.mrp + blockInnerWidths.product + blockInnerWidths.qty,
+        cursorY,
+        blockInnerWidths.rate,
+        rowHeight,
+        "RATE",
+        { fontSize: 8.1 },
+      );
+      drawCell(
+        x + blockInnerWidths.mrp + blockInnerWidths.product + blockInnerWidths.qty + blockInnerWidths.rate,
+        cursorY,
+        blockInnerWidths.amt,
+        rowHeight,
+        "AMT",
+        { fontSize: 8.1 },
+      );
+
+      cursorY += rowHeight;
+
+      items.forEach((item) => {
+        const itemProductId =
+          typeof item.productId === "object"
+            ? item.productId?._id
+            : item.productId;
+        const rate = itemProductId
+          ? resolveLineAmount(item.amount, item.productRate, bill.dealerId?.margin)
+          : resolveCustomAmount(item.amount, item.productRate);
+        const total = item.total ?? Number(item.quantity || 0) * rate;
+        const productName = item.productName || "-";
+
+        drawCell(x, cursorY, blockInnerWidths.mrp, rowHeight, formatPdfAmount(
+          item.mrp || (typeof item.productId === "object" ? item.productId?.mrp : 0),
+        ), { align: "right", fontSize: 7.9, minFontSize: 7.2 });
+        drawCell(x + blockInnerWidths.mrp, cursorY, blockInnerWidths.product, rowHeight, productName, {
+          fontSize: 7.8,
+          minFontSize: 6.9,
+        });
+        drawCell(
+          x + blockInnerWidths.mrp + blockInnerWidths.product,
+          cursorY,
+          blockInnerWidths.qty,
+          rowHeight,
+          String(Number(item.quantity || 0)),
+          { align: "right", fontSize: 7.9, minFontSize: 7.2 },
+        );
+        drawCell(
+          x + blockInnerWidths.mrp + blockInnerWidths.product + blockInnerWidths.qty,
+          cursorY,
+          blockInnerWidths.rate,
+          rowHeight,
+          formatPdfAmount(rate),
+          { align: "right", fontSize: 7.8, minFontSize: 7.1 },
+        );
+        drawCell(
+          x + blockInnerWidths.mrp + blockInnerWidths.product + blockInnerWidths.qty + blockInnerWidths.rate,
+          cursorY,
+          blockInnerWidths.amt,
+          rowHeight,
+          formatPdfAmount(total),
+          { align: "right", fontSize: 8, minFontSize: 7.3 },
+        );
+        cursorY += rowHeight;
+      });
+
+      drawCell(
+        x + blockInnerWidths.mrp + blockInnerWidths.product + blockInnerWidths.qty,
+        cursorY,
+        blockInnerWidths.rate,
+        rowHeight,
+        "TOTAL",
+        { fontSize: 8.4, minFontSize: 7.6 },
+      );
+      drawCell(
+        x + blockInnerWidths.mrp + blockInnerWidths.product + blockInnerWidths.qty + blockInnerWidths.rate,
+        cursorY,
+        blockInnerWidths.amt,
+        rowHeight,
+        formatRoundedPdfAmount(bill.totalAmount),
+        { bold: true, align: "right", fontSize: 8.4, minFontSize: 7.6 },
+      );
+    };
+
+    const drawSummaryTable = () => {
+      const startX = marginX + 8;
+      let cursorY = marginTop + 8;
+      const tableWidth = contentWidth - 16;
+      const firstColumn = summaryWidths.date;
+      const secondColumn = summaryWidths.bill;
+      const thirdColumn = tableWidth - firstColumn - secondColumn;
+
+      drawCell(startX, cursorY, firstColumn, rowHeight + 4, "DATE", { fontSize: 9 });
+      drawCell(startX + firstColumn, cursorY, secondColumn, rowHeight + 4, "BILL AMOUNT", { fontSize: 9 });
+      drawCell(startX + firstColumn + secondColumn, cursorY, thirdColumn, rowHeight + 4, "RECEIVED AMOUNT", { fontSize: 9 });
+
+      cursorY += rowHeight + 8;
+
+      bodyRows.forEach((row) => {
+        drawCell(startX, cursorY, firstColumn, rowHeight, String(row[0] || "-"), { align: "left", fontSize: 8.6 });
+        drawCell(startX + firstColumn, cursorY, secondColumn, rowHeight, String(row[2] || "-"), { fontSize: 8.6 });
+        drawCell(startX + firstColumn + secondColumn, cursorY, thirdColumn, rowHeight, String(row[3] || "-"), { fontSize: 8.6 });
+        cursorY += rowHeight;
+      });
+
+      drawCell(startX, cursorY + 8, firstColumn, rowHeight, "", { fontSize: 8.6 });
+      drawCell(startX + firstColumn, cursorY + 8, secondColumn, rowHeight, formatPdfAmount(totalBillAmount), { fontSize: 8.6 });
+      drawCell(startX + firstColumn + secondColumn, cursorY + 8, thirdColumn, rowHeight, formatPdfAmount(totalPaymentAmount), { fontSize: 8.6 });
+
+      cursorY += rowHeight + 32;
+
+      drawCell(startX, cursorY, firstColumn + secondColumn, rowHeight + 2, "PENDING PAYMENT", { fontSize: 9 });
+      drawCell(startX + firstColumn + secondColumn, cursorY, thirdColumn, rowHeight + 2, formatPdfAmount(closingBalance), {
+        fontSize: 9,
+        textColor: [220, 38, 38],
+      });
+    };
+
+    const bodyRows = statementRowsForPdf.length
+      ? statementRowsForPdf.map((row) => [
           row.dateLabel,
-          [
-            row.entryType === "bill" ? "Bill" : "Payment",
-            row.paymentType ? `Type: ${String(row.paymentType).toUpperCase()}` : "",
-            row.product,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          row.billAmount > 0 ? formatAmount(row.billAmount) : "-",
-          row.paymentAmount > 0 ? formatAmount(row.paymentAmount) : "-",
-          formatAmount(row.balance),
+          row.billNo,
+          row.billAmount > 0 ? formatPdfAmount(row.billAmount) : "",
+          row.receivedAmount > 0 ? formatPdfAmount(row.receivedAmount) : "",
         ])
-      : [["-", "No statement entries found for this range", "-", "-", "-"]];
+      : [["-", "-", "-", "-"]];
 
-    autoTable(doc, {
-      startY: cursorY,
-      margin: { left: marginX, right: marginX, bottom: 28 },
-      head: [["Date", "Product / Entry", "Bill Amount", "Payment Amount", "Balance"]],
-      body: bodyRows,
-      theme: "grid",
-      styles: {
-        font: "helvetica",
-        fontSize: 10,
-        cellPadding: { top: 10, right: 10, bottom: 10, left: 10 },
-        lineColor: [226, 232, 240],
-        lineWidth: 0.8,
-        textColor: [15, 23, 42],
-        valign: "top",
-      },
-      headStyles: {
-        fillColor: [241, 245, 249],
-        textColor: [15, 23, 42],
-        fontStyle: "bold",
-        lineColor: [203, 213, 225],
-      },
-      alternateRowStyles: {
-        fillColor: [250, 252, 251],
-      },
-      columnStyles: {
-        0: { cellWidth: 82, fontStyle: "bold" },
-        1: { cellWidth: 215 },
-        2: { cellWidth: 85, halign: "right" },
-        3: { cellWidth: 95, halign: "right" },
-        4: { cellWidth: 82, halign: "right", fontStyle: "bold" },
-      },
-      didParseCell: (hookData) => {
-        if (hookData.section !== "body") return;
+    if (orderedBillsForPdf.length) {
+      let currentY = marginTop + rowHeight * 2 + 20;
+      drawFirstPageHeader();
+      orderedBillsForPdf.forEach((bill, index) => {
+        const isLeft = index % 2 === 0;
+        const x = isLeft ? marginX : marginX + blockWidth + blockGapX;
+        const blockHeight = getBillBlockHeight(bill);
 
-        const row = statementRows[hookData.row.index];
-        if (!row) return;
+        if (isLeft && index > 0) {
+          const pairHeight = Math.max(
+            blockHeight,
+            orderedBillsForPdf[index + 1] ? getBillBlockHeight(orderedBillsForPdf[index + 1]) : 0,
+          );
 
-        if (hookData.column.index === 1) {
-          hookData.cell.styles.textColor = row.entryType === "bill" ? [4, 120, 87] : [29, 78, 216];
+          if (currentY + pairHeight > pageHeight - 26) {
+            doc.addPage();
+            currentY = marginTop;
+          }
         }
 
-        if (hookData.column.index === 2 && row.billAmount > 0) {
-          hookData.cell.styles.textColor = [4, 120, 87];
-          hookData.cell.styles.fontStyle = "bold";
-        }
+        drawBillBlock(bill, x, currentY);
 
-        if (hookData.column.index === 3 && row.paymentAmount > 0) {
-          hookData.cell.styles.textColor = [29, 78, 216];
-          hookData.cell.styles.fontStyle = "bold";
+        if (!isLeft) {
+          currentY += Math.max(blockHeight, getBillBlockHeight(orderedBillsForPdf[index - 1])) + blockGapY;
+        } else if (index === orderedBillsForPdf.length - 1) {
+          currentY += blockHeight + blockGapY;
         }
+      });
 
-        if (hookData.column.index === 4) {
-          hookData.cell.styles.textColor = row.balance > 0 ? [194, 65, 12] : [4, 120, 87];
-          hookData.cell.styles.fontStyle = "bold";
-        }
-      },
-    });
+      if (doc.getCurrentPageInfo().pageNumber >= 1) {
+        doc.addPage();
+      }
+    } else {
+      drawCell(marginX, marginTop, contentWidth, rowHeight + 4, "NO BILL DETAILS FOUND", { fontSize: 9 });
+      doc.addPage();
+    }
+
+    drawSummaryTable();
+
+    const totalPages = doc.getNumberOfPages();
+    for (let page = 1; page <= totalPages; page += 1) {
+      doc.setPage(page);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`${page}`, pageWidth / 2, pageHeight - 8, { align: "center" });
+    }
 
     doc.save(
       `dealer-statement-${selectedDealer.dealerName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${dateRange[0].format("DD-MM-YYYY")}-to-${dateRange[1].format("DD-MM-YYYY")}.pdf`,
@@ -460,30 +735,19 @@ const DealerStatementPage: React.FC = () => {
       width: 380,
       render: (_, record) => (
         <div style={{ display: "grid", gap: 4 }}>
-          <Space size={8} wrap>
-            <Tag
-              color={record.entryType === "bill" ? "green" : "blue"}
-              style={{ margin: 0, borderRadius: 999 }}
+          {record.entryType === "payment" ? (
+            <Text style={{ color: "#334155" }}>{record.product}</Text>
+          ) : null}
+          {record.entryType === "bill" && record.sourceBill ? (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => setActiveBill(record.sourceBill || null)}
+              style={{ padding: 0, justifyContent: "flex-start", width: "fit-content" }}
             >
-              {record.entryType === "bill" ? "Bill" : "Payment"}
-            </Tag>
-            {record.paymentType ? (
-              <span
-                style={{
-                  padding: "2px 10px",
-                  borderRadius: 999,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  textTransform: "capitalize",
-                  color: getPaymentTypeTone(record.paymentType).color,
-                  background: getPaymentTypeTone(record.paymentType).background,
-                }}
-              >
-                {record.paymentType}
-              </span>
-            ) : null}
-          </Space>
-          <Text style={{ color: "#334155" }}>{record.product}</Text>
+              View Bill
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -517,23 +781,6 @@ const DealerStatementPage: React.FC = () => {
           <Text style={{ color: "#94a3b8" }}>-</Text>
         ),
     },
-    {
-      title: "Balance",
-      dataIndex: "balance",
-      key: "balance",
-      width: 170,
-      align: "right",
-      render: (value: number) => (
-        <Text
-          strong
-          style={{
-            color: Number(value || 0) > 0 ? "#b45309" : "#047857",
-          }}
-        >
-          {formatAmount(value)}
-        </Text>
-      ),
-    },
   ];
 
   return (
@@ -553,7 +800,7 @@ const DealerStatementPage: React.FC = () => {
           border: "1px solid rgba(0, 105, 92, 0.08)",
           overflow: "hidden",
         }}
-        bodyStyle={{ position: "relative", padding: 24 }}
+        bodyStyle={{ position: "relative", padding: 18 }}
       >
         <Button
           size="large"
@@ -584,7 +831,7 @@ const DealerStatementPage: React.FC = () => {
             alignItems: "flex-start",
             gap: 16,
             flexWrap: "wrap",
-            marginBottom: 16,
+            marginBottom: 12,
             paddingRight: 160,
           }}
         >
@@ -627,13 +874,13 @@ const DealerStatementPage: React.FC = () => {
             style={{
               display: "grid",
               gridTemplateColumns: "minmax(220px, 1.2fr) repeat(3, minmax(0, 1fr))",
-              gap: 12,
-              marginBottom: 18,
+              gap: 10,
+              marginBottom: 12,
             }}
           >
             <div
               style={{
-                padding: "16px 18px",
+                padding: "12px 14px",
                 borderRadius: 18,
                 background:
                   "linear-gradient(135deg, rgba(0, 105, 92, 0.1) 0%, rgba(224, 247, 246, 0.95) 55%, rgba(255, 255, 255, 0.98) 100%)",
@@ -662,7 +909,7 @@ const DealerStatementPage: React.FC = () => {
 
             <div
               style={{
-                padding: "16px 18px",
+                padding: "12px 14px",
                 borderRadius: 18,
                 background: "#ffffff",
                 border: "1px solid rgba(0, 105, 92, 0.12)",
@@ -676,7 +923,7 @@ const DealerStatementPage: React.FC = () => {
 
             <div
               style={{
-                padding: "16px 18px",
+                padding: "12px 14px",
                 borderRadius: 18,
                 background: "#ffffff",
                 border: "1px solid rgba(0, 105, 92, 0.12)",
@@ -690,7 +937,7 @@ const DealerStatementPage: React.FC = () => {
 
             <div
               style={{
-                padding: "16px 18px",
+                padding: "12px 14px",
                 borderRadius: 18,
                 background:
                   Number(closingBalance || 0) > 0
@@ -702,7 +949,7 @@ const DealerStatementPage: React.FC = () => {
                     : "1px solid rgba(5, 150, 105, 0.18)",
               }}
             >
-              <Text style={{ color: "#64748b", fontSize: 12 }}>Closing Balance</Text>
+              <Text style={{ color: "#64748b", fontSize: 12 }}>Pending Payment</Text>
               <Title
                 level={4}
                 style={{
@@ -764,11 +1011,207 @@ const DealerStatementPage: React.FC = () => {
                 />
               ),
             }}
-            scroll={{ x: 980, y: 520 }}
+            scroll={{ x: 980, y: "calc(100vh - 410px)" }}
             style={{ marginTop: 8 }}
           />
         )}
       </Card>
+
+      <Modal
+        open={Boolean(activeBill)}
+        onCancel={() => setActiveBill(null)}
+        footer={null}
+        width={980}
+        title="Dealer Bill Details"
+      >
+        {activeBill ? (
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <div
+              style={{
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                borderRadius: 16,
+                padding: 18,
+                background: "#fff",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 16,
+                  borderBottom: "1px solid rgba(15, 23, 42, 0.12)",
+                  paddingBottom: 14,
+                }}
+              >
+                <div>
+                  <Text type="secondary">Bill No</Text>
+                  <div>
+                    <Text strong style={{ fontSize: 18 }}>
+                      {getDealerBillSequence(bills, activeBill) || "-"}
+                    </Text>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <Text type="secondary">Bill Date</Text>
+                  <div>
+                    <Text strong>{formatDate(activeBill.billDate)}</Text>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div>
+                    <Text strong>Dealer Name : </Text>
+                    <Text>{activeBill.dealerId?.dealerName || selectedDealer?.dealerName || "-"}</Text>
+                    <Text style={{ marginLeft: 8 }}>
+                      - {activeBill.dealerId?.contactNo || selectedDealer?.contactNo || "-"}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text strong>City : </Text>
+                    <Text>{activeBill.dealerId?.city || selectedDealer?.city || "-"}</Text>
+                  </div>
+                  <div>
+                    <Text strong>Margin : </Text>
+                    <Text>{Number(activeBill.dealerId?.margin || 0)}%</Text>
+                  </div>
+                  <div>
+                    <Text strong>Created By : </Text>
+                    <Text>{activeBill.userId?.name || activeBill.userId?.email || "-"}</Text>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 18 }}>
+                <Table
+                  rowKey={(record, index) =>
+                    (typeof record.productId === "object"
+                      ? record.productId?._id
+                      : record.productId) || `custom-${index}`
+                  }
+                  dataSource={orderedActiveBillItems}
+                  pagination={false}
+                  locale={{ emptyText: "No bill items found" }}
+                  scroll={{ x: "max-content" }}
+                  columns={[
+                    {
+                      title: "#",
+                      key: "sequence",
+                      width: 70,
+                      align: "center",
+                      render: (_, __, index) => index + 1,
+                    },
+                    {
+                      title: "MRP",
+                      key: "mrp",
+                      width: 130,
+                      render: (_, record) =>
+                        formatAmount(
+                          record.mrp ||
+                            (typeof record.productId === "object"
+                              ? record.productId?.mrp
+                              : 0),
+                        ),
+                    },
+                    {
+                      title: "Product",
+                      key: "productName",
+                      render: (_, record) => record.productName || "-",
+                    },
+                    {
+                      title: "Qty",
+                      dataIndex: "quantity",
+                      key: "quantity",
+                      render: (value) => value ?? 0,
+                      width: 110,
+                    },
+                    {
+                      title: "Amount",
+                      key: "amount",
+                      render: (_, record) => {
+                        const itemProductId =
+                          typeof record.productId === "object"
+                            ? record.productId?._id
+                            : record.productId;
+                        const amount = itemProductId
+                          ? resolveLineAmount(
+                              record.amount,
+                              record.productRate,
+                              activeBill.dealerId?.margin,
+                            )
+                          : resolveCustomAmount(record.amount, record.productRate);
+
+                        return formatAmount(amount);
+                      },
+                      width: 130,
+                    },
+                    {
+                      title: "Total",
+                      key: "total",
+                      render: (_, record) => {
+                        const itemProductId =
+                          typeof record.productId === "object"
+                            ? record.productId?._id
+                            : record.productId;
+                        const amount = itemProductId
+                          ? resolveLineAmount(
+                              record.amount,
+                              record.productRate,
+                              activeBill.dealerId?.margin,
+                            )
+                          : resolveCustomAmount(record.amount, record.productRate);
+
+                        return formatAmount(
+                          record.total ?? Number(record.quantity || 0) * amount,
+                        );
+                      },
+                      width: 160,
+                    },
+                  ]}
+                />
+              </div>
+
+              <div
+                style={{
+                  marginTop: 18,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(185, 28, 28, 0.15)",
+                    background: "rgba(185, 28, 28, 0.05)",
+                  }}
+                >
+                  <Text strong>Katta : {activeBill.kattaCount ?? "-"}</Text>
+                </div>
+
+                <div
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(0, 105, 92, 0.15)",
+                    background: "rgba(0, 105, 92, 0.06)",
+                  }}
+                >
+                  <Text strong>
+                    Total Amount : {formatRoundedAmount(activeBill.totalAmount)}
+                  </Text>
+                </div>
+              </div>
+            </div>
+          </Space>
+        ) : null}
+      </Modal>
     </div>
   );
 };

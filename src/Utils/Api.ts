@@ -256,6 +256,22 @@ export const markAdminBillsAsCompleted = async (billIds: string[]) => {
   }
 };
 
+export const assignAdminBillsToDeliveryMan = async (
+  billIds: string[],
+  deliveryManId: string,
+) => {
+  try {
+    const response = await API.patch("/admin/retailer/bills/ship", {
+      billIds,
+      deliveryManId,
+      status: "shipped",
+    });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const getAllProducts = async () => {
   try {
     const response = await API.get("/admin/retailer/products");

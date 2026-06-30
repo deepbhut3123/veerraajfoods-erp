@@ -24,14 +24,17 @@ import {
 } from "@ant-design/icons";
 import {
   addAdminBill,
+  assignAdminBillsToDeliveryMan,
   deleteAdminBill,
   getAllAdminBills,
   getAllAdminRoutes,
   getAllAdminShops,
   getAllProducts,
+  getAllUsers,
   markAdminBillsAsCompleted,
   updateAdminBill,
 } from "../../Utils/Api";
+import { getRoleMeta } from "../../Utils/roles";
 import "./Index.css";
 
 const { Title, Text } = Typography;
@@ -129,6 +132,15 @@ type ProductOption = {
   productName: string;
   mrp?: number;
   productRate?: number;
+};
+
+type DeliveryManOption = {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  roleId?: number;
+  isActive?: boolean;
 };
 
 type BillFormValues = {
@@ -280,6 +292,9 @@ const BillsPage: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [activeBill, setActiveBill] = useState<BillItem | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [deliveryAssignModalOpen, setDeliveryAssignModalOpen] = useState(false);
+  const [selectedDeliveryManId, setSelectedDeliveryManId] = useState("");
+  const [deliveryMen, setDeliveryMen] = useState<DeliveryManOption[]>([]);
   const [completing, setCompleting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -328,6 +343,24 @@ const BillsPage: React.FC = () => {
     };
 
     void loadStaticData();
+  }, []);
+
+  useEffect(() => {
+    const loadDeliveryMen = async () => {
+      try {
+        const usersRes = await getAllUsers();
+        const availableDeliveryMen = (usersRes?.data || []).filter(
+          (user: DeliveryManOption) => user.roleId === 6 && user.isActive !== false,
+        );
+        setDeliveryMen(availableDeliveryMen);
+      } catch (err: any) {
+        message.error(
+          err?.response?.data?.message || err?.message || "Failed to load delivery men",
+        );
+      }
+    };
+
+    void loadDeliveryMen();
   }, []);
 
   useEffect(() => {
@@ -625,6 +658,33 @@ const BillsPage: React.FC = () => {
       return;
     }
 
+    if (!deliveryMen.length) {
+      message.warning("No active delivery man found");
+      return;
+    }
+
+    setSelectedDeliveryManId("");
+    setDeliveryAssignModalOpen(true);
+  };
+
+  const handleConfirmGenerateSummary = async () => {
+    const selectedBills = data.filter((record, index) =>
+      selectedRowKeys.includes(getRecordKey(record, index)),
+    );
+    const billIds = selectedBills
+      .map((bill) => String(bill._id || bill.id || ""))
+      .filter(Boolean);
+
+    if (!billIds.length) {
+      message.warning("Select at least one bill to generate summary");
+      return;
+    }
+
+    if (!selectedDeliveryManId) {
+      message.warning("Select a delivery man");
+      return;
+    }
+
     const popup = window.open("", "_blank", "width=1100,height=800");
 
     if (!popup) {
@@ -635,12 +695,18 @@ const BillsPage: React.FC = () => {
     setSummaryLoading(true);
 
     try {
+      await assignAdminBillsToDeliveryMan(billIds, selectedDeliveryManId);
       generateSummaryPdf(selectedBills, popup);
-      message.success("Summary generated successfully");
+      setDeliveryAssignModalOpen(false);
+      setSelectedDeliveryManId("");
+      setSelectedRowKeys([]);
+      setActiveBill(null);
+      message.success("Bills assigned and marked as shipped");
+      await loadBills(debouncedSearchText);
     } catch (err: any) {
       popup.close();
       message.error(
-        err?.response?.data?.message || err?.message || "Failed to generate summary",
+        err?.response?.data?.message || err?.message || "Failed to assign and ship bills",
       );
     } finally {
       setSummaryLoading(false);
@@ -1143,6 +1209,47 @@ const BillsPage: React.FC = () => {
             </Tag>
           </div>
         </Form>
+      </Modal>
+
+      <Modal
+        open={deliveryAssignModalOpen}
+        title="Select Delivery Man"
+        onCancel={() => {
+          if (summaryLoading) {
+            return;
+          }
+          setDeliveryAssignModalOpen(false);
+          setSelectedDeliveryManId("");
+        }}
+        onOk={handleConfirmGenerateSummary}
+        okText="Okay"
+        confirmLoading={summaryLoading}
+        okButtonProps={{ disabled: !selectedDeliveryManId || !deliveryMen.length }}
+        destroyOnHidden
+      >
+        <Space direction="vertical" size={12} style={{ width: "100%" }}>
+          <Text type="secondary">
+            After confirmation, all selected bills will be assigned to the chosen delivery
+            man and marked as shipped.
+          </Text>
+          <Select
+            showSearch
+            placeholder="Select delivery man"
+            value={selectedDeliveryManId || undefined}
+            onChange={setSelectedDeliveryManId}
+            optionFilterProp="label"
+            style={{ width: "100%" }}
+            options={deliveryMen.map((user) => {
+              const userId = user._id || user.id || "";
+              const roleMeta = getRoleMeta(user.roleId);
+
+              return {
+                value: userId,
+                label: `${user.name || user.email || "Delivery Man"} (${roleMeta.label})`,
+              };
+            })}
+          />
+        </Space>
       </Modal>
 
       <Modal
