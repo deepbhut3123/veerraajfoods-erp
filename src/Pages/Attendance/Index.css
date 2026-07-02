@@ -1,0 +1,7 @@
+.attendance-alert-row > td {
+  background: rgba(220, 38, 38, 0.1) !important;
+}
+
+.attendance-alert-row:hover > td {
+  background: rgba(220, 38, 38, 0.16) !important;
+}

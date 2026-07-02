@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   AuditOutlined,
   AppstoreOutlined,
+  ClockCircleOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   DollarCircleOutlined,
@@ -40,6 +41,12 @@ const MENU_ITEMS: SidebarMenuItem[] = [
     icon: <DashboardOutlined style={{ color: "inherit" }} />,
     text: "Dashboard",
     link: "/dashboard",
+  },
+  {
+    key: "attendance",
+    icon: <ClockCircleOutlined style={{ color: "inherit" }} />,
+    text: "Attendance",
+    link: "/attendance",
   },
   {
     key: "retailer-group",
@@ -165,9 +172,30 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [openKeys, setOpenKeys] = useState<string[]>([]);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
   const siderRef = useRef<HTMLDivElement>(null);
+  const currentUserRoleId = useMemo(() => {
+    const stored = JSON.parse(localStorage.getItem("authData") || "{}");
+    return Number(stored?.roleId ?? stored?.user?.roleId ?? 0);
+  }, []);
+
+  const visibleMenuItems = useMemo(
+    () =>
+      MENU_ITEMS.filter((item) => {
+        if (item.key === "attendance") {
+          return currentUserRoleId === 1;
+        }
+
+        return true;
+      }),
+    [currentUserRoleId],
+  );
+
+  const flatVisibleMenuItems = useMemo(
+    () => getFlatMenuItems(visibleMenuItems),
+    [visibleMenuItems],
+  );
 
   useEffect(() => {
-    const currentItem = FLAT_MENU_ITEMS.find(
+    const currentItem = flatVisibleMenuItems.find(
       (item) =>
         location.pathname === item.link ||
         (item.link && location.pathname.startsWith(`${item.link}/`)),
@@ -186,6 +214,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   useEffect(() => {
     const routeTitles: Record<string, string> = {
       "/dashboard": "Dashboard",
+      "/attendance": "Attendance",
       "/routes": "Retailer Routes",
       "/shops": "Retailer Shops",
       "/bills": "Retailer Bills",
@@ -251,7 +280,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const menuItems: MenuProps["items"] = useMemo(
     () =>
-      MENU_ITEMS.map((item) => {
+      visibleMenuItems.map((item) => {
         if (isMenuGroup(item)) {
           return {
             key: item.key,
@@ -327,7 +356,13 @@ const Sidebar: React.FC<SidebarProps> = ({
           ),
         };
       }),
-    [ACTIVE_LIGHT_COLOR, DEFAULT_ICON_COLOR, DEFAULT_TEXT_COLOR, activeMenuItemKey],
+    [
+      ACTIVE_LIGHT_COLOR,
+      DEFAULT_ICON_COLOR,
+      DEFAULT_TEXT_COLOR,
+      activeMenuItemKey,
+      visibleMenuItems,
+    ],
   );
 
   const normalizedOpenKeys = openKeys.filter(Boolean);

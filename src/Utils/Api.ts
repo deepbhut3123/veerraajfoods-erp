@@ -618,3 +618,17 @@ export const updateUserActiveStatus = async (id: string, isActive: boolean) => {
     throw error;
   }
 };
+
+export const getAdminAttendance = async (params?: {
+  search?: string;
+  userId?: string;
+  fromDate?: string;
+  toDate?: string;
+}) => {
+  try {
+    const response = await API.get("/admin/attendance", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
