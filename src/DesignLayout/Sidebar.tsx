@@ -209,7 +209,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       setActiveMenuItemKey(null);
       setOpenKeys([]);
     }
-  }, [location.pathname]);
+  }, [flatVisibleMenuItems, location.pathname]);
 
   useEffect(() => {
     const routeTitles: Record<string, string> = {

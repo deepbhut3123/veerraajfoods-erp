@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Card,
@@ -158,16 +158,16 @@ const AttendancePage: React.FC = () => {
 
   const isAdmin = currentUserRoleId === 1;
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       const usersRes = await getAllUsers();
       setUsers(usersRes?.data || []);
     } catch (err: any) {
       message.error(err?.response?.data?.message || err?.message || "Failed to load users");
     }
-  };
+  }, []);
 
-  const loadAttendance = async () => {
+  const loadAttendance = useCallback(async () => {
     if (!isAdmin) {
       setLoading(false);
       return;
@@ -190,7 +190,7 @@ const AttendancePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange, isAdmin, search, selectedUserId]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -198,7 +198,7 @@ const AttendancePage: React.FC = () => {
     }
 
     loadUsers();
-  }, [isAdmin]);
+  }, [isAdmin, loadUsers]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -210,7 +210,7 @@ const AttendancePage: React.FC = () => {
 
   useEffect(() => {
     loadAttendance();
-  }, [isAdmin, search, selectedUserId, dateRange]);
+  }, [loadAttendance]);
 
   const userOptions = useMemo(
     () =>
