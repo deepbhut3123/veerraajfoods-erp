@@ -632,3 +632,21 @@ export const getAdminAttendance = async (params?: {
     throw error;
   }
 };
+
+export const updateAdminAttendance = async (
+  id: string,
+  data: {
+    userId: string;
+    date: string;
+    inTime: string;
+    outTime?: string;
+    ipAddress?: string;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/attendance/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};

@@ -4,19 +4,33 @@ import {
   Card,
   DatePicker,
   Empty,
+  Form,
   Input,
+  Modal,
   Select,
   Space,
   Table,
   Tag,
+  TimePicker,
+  Tooltip,
   Typography,
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
+import jsPDF from "jspdf";
 import customParseFormat from "dayjs/plugin/customParseFormat";
-import { ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { getAdminAttendance, getAllUsers } from "../../Utils/Api";
+import {
+  EditOutlined,
+  FilePdfOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
+import {
+  getAdminAttendance,
+  getAllUsers,
+  updateAdminAttendance,
+} from "../../Utils/Api";
 import "./Index.css";
 
 const { RangePicker } = DatePicker;
@@ -47,6 +61,20 @@ type UserOption = {
   name: string;
   email: string;
   roleId: number;
+};
+
+type AttendanceFormValues = {
+  userId: string;
+  date: dayjs.Dayjs;
+  inTime: dayjs.Dayjs;
+  outTime?: dayjs.Dayjs | null;
+  ipAddress?: string;
+};
+
+type AttendanceStatementFormValues = {
+  userId: string;
+  month: number;
+  year: number;
 };
 
 const THEME = {
@@ -121,20 +149,44 @@ const formatTime = (value?: string, attendanceDate?: string) => {
 };
 
 const getDuration = (inTime?: string, outTime?: string, attendanceDate?: string) => {
-  if (!inTime || !outTime) {
+  const diffMinutes = getDurationMinutes(inTime, outTime, attendanceDate);
+
+  if (diffMinutes === null) {
     return "-";
+  }
+
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+
+  return `${hours}h ${minutes}m`;
+};
+
+const getDurationMinutes = (inTime?: string, outTime?: string, attendanceDate?: string) => {
+  if (!inTime || !outTime) {
+    return null;
   }
 
   const start = parseAttendanceDateTime(inTime, attendanceDate);
   const end = parseAttendanceDateTime(outTime, attendanceDate);
 
   if (!start || !end || !start.isValid() || !end.isValid() || end.isBefore(start)) {
+    return null;
+  }
+
+  return end.diff(start, "minute");
+};
+
+const getAttendanceRecordId = (record: AttendanceItem) =>
+  record._id || record.id || `${record.userId}-${record.date}`;
+
+const formatHoursFromMinutes = (value?: number | null) => {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
     return "-";
   }
 
-  const diffMinutes = end.diff(start, "minute");
-  const hours = Math.floor(diffMinutes / 60);
-  const minutes = diffMinutes % 60;
+  const totalMinutes = Math.max(0, Number(value));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
   return `${hours}h ${minutes}m`;
 };
@@ -150,6 +202,13 @@ const AttendancePage: React.FC = () => {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(
     null,
   );
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingItem, setEditingItem] = useState<AttendanceItem | null>(null);
+  const [statementModalOpen, setStatementModalOpen] = useState(false);
+  const [statementGenerating, setStatementGenerating] = useState(false);
+  const [editForm] = Form.useForm<AttendanceFormValues>();
+  const [statementForm] = Form.useForm<AttendanceStatementFormValues>();
 
   const currentUserRoleId = useMemo(() => {
     const stored = JSON.parse(localStorage.getItem("authData") || "{}");
@@ -223,6 +282,287 @@ const AttendancePage: React.FC = () => {
     [users],
   );
 
+  const openEdit = (item: AttendanceItem) => {
+    const attendanceDate = dayjs(item.date);
+    const inTime = parseAttendanceDateTime(item.inTime, item.date);
+    const outTime = parseAttendanceDateTime(item.outTime, item.date);
+
+    editForm.setFieldsValue({
+      userId: item.userId || item.user?._id || item.user?.id || "",
+      date: attendanceDate.isValid() ? attendanceDate : dayjs(),
+      inTime: inTime && inTime.isValid() ? inTime : dayjs(),
+      outTime: outTime && outTime.isValid() ? outTime : null,
+      ipAddress: item.ipAddress || "",
+    });
+
+    setEditingItem(item);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setSaving(false);
+    setEditingItem(null);
+    editForm.resetFields();
+  };
+
+  const handleSubmit = async (values: AttendanceFormValues) => {
+    if (!editingItem) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const recordId = editingItem._id || editingItem.id;
+
+      if (!recordId) {
+        throw new Error("Attendance record id is missing");
+      }
+
+      await updateAdminAttendance(recordId, {
+        userId: values.userId,
+        date: values.date.format("YYYY-MM-DD"),
+        inTime: values.inTime.format("hh:mm A"),
+        outTime: values.outTime ? values.outTime.format("hh:mm A") : undefined,
+        ipAddress: values.ipAddress?.trim() || undefined,
+      });
+
+      message.success("Attendance updated successfully");
+      closeModal();
+      await loadAttendance();
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to update attendance",
+      );
+      setSaving(false);
+    }
+  };
+
+  const openStatementModal = () => {
+    statementForm.setFieldsValue({
+      userId: selectedUserId || undefined,
+      month: dayjs().month(),
+      year: dayjs().year(),
+    });
+    setStatementModalOpen(true);
+  };
+
+  const closeStatementModal = () => {
+    setStatementModalOpen(false);
+    setStatementGenerating(false);
+    statementForm.resetFields();
+  };
+
+  const handleGenerateStatement = async (values: AttendanceStatementFormValues) => {
+    setStatementGenerating(true);
+
+    try {
+      const monthStart = dayjs()
+        .year(values.year)
+        .month(values.month)
+        .startOf("month");
+      const monthEnd = monthStart.endOf("month");
+
+      const response = await getAdminAttendance({
+        userId: values.userId,
+        fromDate: monthStart.format("YYYY-MM-DD"),
+        toDate: monthEnd.format("YYYY-MM-DD"),
+      });
+
+      const staffUser = users.find((user) => (user._id || user.id) === values.userId);
+      const statementRecords: AttendanceItem[] = (Array.isArray(response?.data) ? response.data : [])
+        .filter(
+          (record: AttendanceItem) =>
+            (record.userId || record.user?._id || record.user?.id) === values.userId,
+        )
+        .sort((left: AttendanceItem, right: AttendanceItem) => {
+          const dateDiff = dayjs(left.date).valueOf() - dayjs(right.date).valueOf();
+          if (dateDiff !== 0) {
+            return dateDiff;
+          }
+
+          const leftIn = parseAttendanceDateTime(left.inTime, left.date)?.valueOf() || 0;
+          const rightIn = parseAttendanceDateTime(right.inTime, right.date)?.valueOf() || 0;
+          return leftIn - rightIn;
+        });
+
+      const totalMinutes = statementRecords.reduce(
+        (sum: number, record: AttendanceItem) =>
+          sum + (getDurationMinutes(record.inTime, record.outTime, record.date) || 0),
+        0,
+      );
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: "a4",
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 36;
+      const marginTop = 42;
+      const contentWidth = pageWidth - marginX * 2;
+      const rowHeight = 24;
+      const colWidths = [120, 110, 110, contentWidth - 340];
+      const monthLabel = monthStart.format("MMMM YYYY");
+      const staffName = staffUser?.name || statementRecords[0]?.user?.name || "Staff User";
+
+      const drawCell = (
+        x: number,
+        y: number,
+        width: number,
+        height: number,
+        text: string,
+        options?: {
+          align?: "left" | "center" | "right";
+          bold?: boolean;
+          fill?: [number, number, number];
+          fontSize?: number;
+        },
+      ) => {
+        doc.setDrawColor(180, 196, 201);
+        doc.setLineWidth(0.8);
+
+        if (options?.fill) {
+          doc.setFillColor(...options.fill);
+          doc.rect(x, y, width, height, "FD");
+        } else {
+          doc.rect(x, y, width, height);
+        }
+
+        doc.setFont("helvetica", options?.bold ? "bold" : "normal");
+        doc.setFontSize(options?.fontSize || 10);
+        doc.setTextColor(15, 23, 42);
+
+        const align = options?.align || "left";
+        const textX =
+          align === "left" ? x + 8 : align === "right" ? x + width - 8 : x + width / 2;
+
+        doc.text(String(text || "-"), textX, y + height / 2 + 4, { align });
+      };
+
+      const drawHeader = () => {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.setTextColor(0, 77, 64);
+        doc.text("Attendance Statement", marginX, marginTop);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(15, 23, 42);
+        doc.text(staffName, marginX, marginTop + 24);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        doc.setTextColor(71, 85, 105);
+        doc.text(monthLabel, marginX, marginTop + 42);
+      };
+
+      const drawTableHeader = (y: number) => {
+        let cursorX = marginX;
+        ["Date", "In Time", "Out Time", "Total Hours"].forEach((label, index) => {
+          drawCell(cursorX, y, colWidths[index], rowHeight, label, {
+            align: "center",
+            bold: true,
+            fill: [224, 247, 246],
+          });
+          cursorX += colWidths[index];
+        });
+      };
+
+      drawHeader();
+
+      let cursorY = marginTop + 64;
+      drawTableHeader(cursorY);
+      cursorY += rowHeight;
+
+      if (!statementRecords.length) {
+        drawCell(marginX, cursorY, contentWidth, rowHeight, "No attendance records found", {
+          align: "center",
+        });
+        cursorY += rowHeight;
+      } else {
+        statementRecords.forEach((record: AttendanceItem) => {
+          if (cursorY + rowHeight > pageHeight - 60) {
+            doc.addPage();
+            drawHeader();
+            cursorY = marginTop + 64;
+            drawTableHeader(cursorY);
+            cursorY += rowHeight;
+          }
+
+          const rowValues = [
+            formatDate(record.date),
+            formatTime(record.inTime, record.date),
+            formatTime(record.outTime, record.date),
+            getDuration(record.inTime, record.outTime, record.date),
+          ];
+
+          let cursorX = marginX;
+          rowValues.forEach((value, index) => {
+            drawCell(cursorX, cursorY, colWidths[index], rowHeight, value, {
+              align: index === 0 ? "left" : "center",
+            });
+            cursorX += colWidths[index];
+          });
+
+          cursorY += rowHeight;
+        });
+      }
+
+      if (cursorY + rowHeight > pageHeight - 60) {
+        doc.addPage();
+        drawHeader();
+        cursorY = marginTop + 64;
+        drawTableHeader(cursorY);
+        cursorY += rowHeight;
+      }
+
+      let totalRowX = marginX;
+      drawCell(totalRowX, cursorY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, "Total Hours", {
+        align: "right",
+        bold: true,
+        fill: [240, 253, 250],
+      });
+      totalRowX += colWidths[0] + colWidths[1] + colWidths[2];
+      drawCell(totalRowX, cursorY, colWidths[3], rowHeight, formatHoursFromMinutes(totalMinutes), {
+        align: "center",
+        bold: true,
+        fill: [240, 253, 250],
+      });
+
+      doc.save(
+        `attendance-statement-${staffName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${monthStart.format("MM-YYYY")}.pdf`,
+      );
+
+      closeStatementModal();
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to generate attendance statement",
+      );
+      setStatementGenerating(false);
+    }
+  };
+
+  const statementYearOptions = useMemo(() => {
+    const currentYear = dayjs().year();
+    return Array.from({ length: 7 }, (_, index) => currentYear - index).map((year) => ({
+      value: year,
+      label: String(year),
+    }));
+  }, []);
+
+  const statementMonthOptions = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, month) => ({
+        value: month,
+        label: dayjs().month(month).format("MMMM"),
+      })),
+    [],
+  );
+
   const columns: ColumnsType<AttendanceItem> = [
     {
       title: "User",
@@ -291,6 +631,28 @@ const AttendancePage: React.FC = () => {
           </Tag>
         );
       },
+    },
+    {
+      title: "Actions",
+      key: "actions",
+      width: 96,
+      fixed: "right",
+      render: (_, record) => (
+        <Tooltip title="Edit attendance">
+          <Button
+            type="text"
+            aria-label="Edit attendance"
+            onClick={() => openEdit(record)}
+            icon={<EditOutlined />}
+            style={{
+              color: THEME.mid,
+              borderRadius: 10,
+              width: 36,
+              height: 36,
+            }}
+          />
+        </Tooltip>
+      ),
     },
   ];
 
@@ -361,20 +723,38 @@ const AttendancePage: React.FC = () => {
               View mobile-app attendance, in time, out time, and network IP for staff users.
             </Text>
           </div>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={loadAttendance}
-            style={{
-              height: 42,
-              paddingInline: 18,
-              borderRadius: 12,
-              borderColor: "rgba(0, 105, 92, 0.24)",
-              color: THEME.mid,
-              fontWeight: 600,
-            }}
-          >
-            Refresh
-          </Button>
+          <Space size={12} wrap>
+            <Button
+              icon={<FilePdfOutlined />}
+              onClick={openStatementModal}
+              style={{
+                height: 42,
+                paddingInline: 18,
+                borderRadius: 12,
+                border: "none",
+                color: "#fff",
+                fontWeight: 600,
+                background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+                boxShadow: "0 10px 20px rgba(0, 105, 92, 0.18)",
+              }}
+            >
+              Statement
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={loadAttendance}
+              style={{
+                height: 42,
+                paddingInline: 18,
+                borderRadius: 12,
+                borderColor: "rgba(0, 105, 92, 0.24)",
+                color: THEME.mid,
+                fontWeight: 600,
+              }}
+            >
+              Refresh
+            </Button>
+          </Space>
         </Space>
 
         <Card
@@ -432,12 +812,12 @@ const AttendancePage: React.FC = () => {
           <Text type="danger">{error}</Text>
         ) : (
           <Table
-            rowKey={(record) => record._id || record.id || `${record.userId}-${record.date}`}
+            rowKey={getAttendanceRecordId}
             loading={loading}
             dataSource={records}
             columns={columns}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
-            scroll={{ x: "max-content", y: 520 }}
+            pagination={false}
+            scroll={{ x: "max-content", y: 420 }}
             rowClassName={(record) =>
               record.ipAddress && record.ipAddress !== EXPECTED_ATTENDANCE_IP
                 ? "attendance-alert-row"
@@ -446,6 +826,232 @@ const AttendancePage: React.FC = () => {
           />
         )}
       </Card>
+
+      <Modal
+        title={
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontWeight: 700, color: THEME.dark }}>
+              Edit Attendance
+            </span>
+            <span style={{ color: "#64748b", fontSize: 13, fontWeight: 400 }}>
+              Update staff, date, timings, and network IP for this attendance entry
+            </span>
+          </div>
+        }
+        open={modalOpen}
+        onCancel={closeModal}
+        onOk={() => editForm.submit()}
+        okText="Save Changes"
+        okButtonProps={{
+          loading: saving,
+          style: {
+            background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+            borderColor: "#00695C",
+            borderRadius: 10,
+          },
+        }}
+        cancelButtonProps={{ style: { borderRadius: 10 } }}
+        destroyOnClose
+        centered
+        width={720}
+        styles={{
+          header: {
+            borderBottom: "1px solid rgba(0, 105, 92, 0.12)",
+            padding: "18px 22px",
+            background:
+              "linear-gradient(135deg, rgba(224,247,246,0.95) 0%, rgba(255,255,255,1) 70%)",
+          },
+          body: {
+            padding: "22px 24px 10px",
+            background: "linear-gradient(180deg, #ffffff 0%, #fbfefd 100%)",
+          },
+          footer: {
+            borderTop: "1px solid rgba(0, 105, 92, 0.12)",
+            padding: "16px 24px 20px",
+            background: "#fff",
+          },
+        }}
+      >
+        <Form form={editForm} layout="vertical" onFinish={handleSubmit}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 16,
+            }}
+          >
+            <Form.Item
+              label="Staff User"
+              name="userId"
+              rules={[{ required: true, message: "Please select staff user" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <Select
+                size="large"
+                showSearch
+                placeholder="Select staff user"
+                options={userOptions}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Date"
+              name="date"
+              rules={[{ required: true, message: "Please select date" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <DatePicker
+                size="large"
+                style={{ width: "100%" }}
+                format="DD MMM YYYY"
+              />
+            </Form.Item>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 16,
+              marginTop: 16,
+            }}
+          >
+            <Form.Item
+              label="In Time"
+              name="inTime"
+              rules={[{ required: true, message: "Please select in time" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <TimePicker
+                size="large"
+                use12Hours
+                format="hh:mm A"
+                style={{ width: "100%" }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Out Time"
+              name="outTime"
+              style={{ marginBottom: 0 }}
+            >
+              <TimePicker
+                size="large"
+                use12Hours
+                format="hh:mm A"
+                style={{ width: "100%" }}
+              />
+            </Form.Item>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <Form.Item
+              label="IP Address"
+              name="ipAddress"
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                size="large"
+                placeholder="Enter IP address"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+          </div>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontWeight: 700, color: THEME.dark }}>
+              Attendance Statement
+            </span>
+            <span style={{ color: "#64748b", fontSize: 13, fontWeight: 400 }}>
+              Select staff, month, and year to generate attendance PDF
+            </span>
+          </div>
+        }
+        open={statementModalOpen}
+        onCancel={closeStatementModal}
+        onOk={() => statementForm.submit()}
+        okText="Generate PDF"
+        okButtonProps={{
+          loading: statementGenerating,
+          style: {
+            background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+            borderColor: "#00695C",
+            borderRadius: 10,
+          },
+        }}
+        cancelButtonProps={{ style: { borderRadius: 10 } }}
+        destroyOnClose
+        centered
+        width={620}
+        styles={{
+          header: {
+            borderBottom: "1px solid rgba(0, 105, 92, 0.12)",
+            padding: "18px 22px",
+            background:
+              "linear-gradient(135deg, rgba(224,247,246,0.95) 0%, rgba(255,255,255,1) 70%)",
+          },
+          body: {
+            padding: "22px 24px 10px",
+            background: "linear-gradient(180deg, #ffffff 0%, #fbfefd 100%)",
+          },
+          footer: {
+            borderTop: "1px solid rgba(0, 105, 92, 0.12)",
+            padding: "16px 24px 20px",
+            background: "#fff",
+          },
+        }}
+      >
+        <Form form={statementForm} layout="vertical" onFinish={handleGenerateStatement}>
+          <Form.Item
+            label="Staff User"
+            name="userId"
+            rules={[{ required: true, message: "Please select staff user" }]}
+          >
+            <Select
+              size="large"
+              showSearch
+              placeholder="Select staff user"
+              options={userOptions}
+            />
+          </Form.Item>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 16,
+            }}
+          >
+            <Form.Item
+              label="Month"
+              name="month"
+              rules={[{ required: true, message: "Please select month" }]}
+            >
+              <Select
+                size="large"
+                placeholder="Select month"
+                options={statementMonthOptions}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Year"
+              name="year"
+              rules={[{ required: true, message: "Please select year" }]}
+            >
+              <Select
+                size="large"
+                placeholder="Select year"
+                options={statementYearOptions}
+              />
+            </Form.Item>
+          </div>
+        </Form>
+      </Modal>
     </div>
   );
 };
