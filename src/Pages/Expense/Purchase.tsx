@@ -249,11 +249,11 @@ const ExpensePurchasesPage: React.FC = () => {
     }
   };
 
-  const watchedItems = Form.useWatch("items", form) || [];
+  const watchedItems = Form.useWatch("items", form);
 
   const draftTotal = useMemo(
     () =>
-      watchedItems.reduce((sum: number, item: PurchaseFormValues["items"][number]) => {
+      (watchedItems || []).reduce((sum: number, item: PurchaseFormValues["items"][number]) => {
         const line = getLineValues(item);
         return sum + line.total;
       }, 0),

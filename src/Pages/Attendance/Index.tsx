@@ -206,14 +206,6 @@ const getDecimalHoursFromMinutes = (value?: number | null) => {
   return Number(value) / 60;
 };
 
-const formatCurrency = (value?: number | null) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-
 const formatPdfCurrency = (value?: number | null) =>
   `Rs ${Number(value || 0).toFixed(2)}`;
 

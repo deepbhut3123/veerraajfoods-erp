@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Button,
   Card,
@@ -96,7 +96,7 @@ const ExpenseEntriesPage: React.FC = () => {
   const [form] = Form.useForm<ExpenseEntryFormValues>();
   const watchedExpenseType = Form.useWatch("expenseType", form);
 
-  const loadEntries = async () => {
+  const loadEntries = useCallback(async () => {
     setLoading(true);
     try {
       const response = await getAllExpenseEntries({
@@ -108,11 +108,11 @@ const ExpenseEntriesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedExpenseType]);
 
   useEffect(() => {
     void loadEntries();
-  }, [selectedExpenseType]);
+  }, [loadEntries]);
 
   const openCreate = () => {
     setEditingItem(null);

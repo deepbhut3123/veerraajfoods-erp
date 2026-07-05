@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Card,
@@ -97,7 +97,6 @@ const StocksEntriesPage: React.FC = () => {
   const [data, setData] = useState<StockEntryRow[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingProducts, setLoadingProducts] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<StockEntryRow | null>(null);
@@ -123,7 +122,6 @@ const StocksEntriesPage: React.FC = () => {
 
   useEffect(() => {
     const loadProducts = async () => {
-      setLoadingProducts(true);
       try {
         const response = await getAllProducts();
         setProducts(Array.isArray(response?.data) ? response.data : []);
@@ -131,16 +129,17 @@ const StocksEntriesPage: React.FC = () => {
         message.error(
           err?.response?.data?.message || err?.message || "Failed to load retailer products",
         );
-      } finally {
-        setLoadingProducts(false);
       }
     };
 
     void loadProducts();
   }, []);
 
-  const resolveProduct = (productId?: string) =>
-    products.find((product) => (product._id || product.id || "") === productId);
+  const resolveProduct = useCallback(
+    (productId?: string) =>
+      products.find((product) => (product._id || product.id || "") === productId),
+    [products],
+  );
 
   const buildInitialProductRows = () =>
     products.map((product) => ({
@@ -267,16 +266,16 @@ const StocksEntriesPage: React.FC = () => {
     }
   };
 
-  const watchedItems = Form.useWatch("items", form) || [];
+  const watchedItems = Form.useWatch("items", form);
 
   const draftTotal = useMemo(
     () =>
-      watchedItems.reduce((sum: number, item: { productId?: string; quantity?: number }) => {
+      (watchedItems || []).reduce((sum: number, item: { productId?: string; quantity?: number }) => {
         const product = resolveProduct(item?.productId);
         const quantity = Number(item?.quantity || 0);
         return sum + (product ? Number(product.productRate || 0) * quantity : 0);
       }, 0),
-    [products, watchedItems],
+    [resolveProduct, watchedItems],
   );
 
   const columns: ColumnsType<StockEntryRow> = [
