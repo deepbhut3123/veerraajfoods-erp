@@ -6,6 +6,10 @@ import DealerPage from "./Pages/DealerManagement/Index";
 import DealerPaymentsPage from "./Pages/DealerPayments/Index";
 import DealerProductsPage from "./Pages/DealerProducts/Index";
 import DealerStatementPage from "./Pages/DealerStatement/Index";
+import ExpenseEntriesPage from "./Pages/Expense/Entries";
+import ExpensePurchasesPage from "./Pages/Expense/Purchase";
+import StocksDashboardPage from "./Pages/Stocks/Dashboard";
+import StocksEntriesPage from "./Pages/Stocks/Entries";
 import RoutesPage from "./Pages/Routes/Index";
 import ShopsPage from "./Pages/Shops/Index";
 import ProductsPage from "./Pages/Products/Index";
@@ -16,11 +20,6 @@ const AdminRoutes = [
     path: "/dashboard",
     name: "Dashboard",
     component: Dashboard,
-  },
-  {
-    path: "/attendance",
-    name: "Attendance",
-    component: AttendancePage,
   },
   {
     path: "/routes",
@@ -66,6 +65,31 @@ const AdminRoutes = [
     path: "/dealer-statement",
     name: "Dealer Statement",
     component: DealerStatementPage,
+  },
+  {
+    path: "/stocks-dashboard",
+    name: "Stocks Dashboard",
+    component: StocksDashboardPage,
+  },
+  {
+    path: "/stocks-entry",
+    name: "Stocks Entry",
+    component: StocksEntriesPage,
+  },
+  {
+    path: "/expense-purchases",
+    name: "Purchase",
+    component: ExpensePurchasesPage,
+  },
+  {
+    path: "/expense-entries",
+    name: "Expense Entry",
+    component: ExpenseEntriesPage,
+  },
+  {
+    path: "/attendance",
+    name: "Attendance",
+    component: AttendancePage,
   },
   {
     path: "/users",

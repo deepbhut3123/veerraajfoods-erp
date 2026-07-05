@@ -4,6 +4,7 @@ import {
   Card,
   Form,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
   Select,
@@ -39,6 +40,7 @@ type UserItem = {
   name: string;
   email: string;
   roleId: number;
+  salary?: number | null;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -49,6 +51,7 @@ type UserFormValues = {
   email: string;
   password?: string;
   roleId: number;
+  salary?: number | null;
   isActive: boolean;
 };
 
@@ -78,6 +81,7 @@ const UsersPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<UserItem | null>(null);
   const [form] = Form.useForm<UserFormValues>();
+  const selectedRoleId = Form.useWatch("roleId", form);
 
   const currentUserId = useMemo(() => {
     const stored = JSON.parse(localStorage.getItem("authData") || "{}");
@@ -114,6 +118,7 @@ const UsersPage: React.FC = () => {
       name: item.name,
       email: item.email,
       roleId: item.roleId,
+      salary: item.salary ?? null,
       isActive: item.isActive,
       password: "",
     });
@@ -134,6 +139,7 @@ const UsersPage: React.FC = () => {
           name: values.name,
           email: values.email,
           roleId: values.roleId,
+          salary: values.roleId === 5 ? values.salary ?? null : null,
           isActive: values.isActive,
         };
 
@@ -149,6 +155,7 @@ const UsersPage: React.FC = () => {
           email: values.email,
           password: values.password || "",
           roleId: values.roleId,
+          salary: values.roleId === 5 ? values.salary ?? null : null,
           isActive: values.isActive,
         });
         message.success("User created successfully");
@@ -483,7 +490,14 @@ const UsersPage: React.FC = () => {
             </Form.Item>
           </div>
 
-          <div style={{ marginTop: 16 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 16,
+              marginTop: 16,
+            }}
+          >
             <Form.Item
               label="Account Status"
               name="isActive"
@@ -492,6 +506,25 @@ const UsersPage: React.FC = () => {
             >
               <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
             </Form.Item>
+
+            {selectedRoleId === 5 ? (
+              <Form.Item
+                label="Salary"
+                name="salary"
+                rules={[{ required: true, message: "Please enter salary" }]}
+                style={{ marginBottom: 0 }}
+              >
+                <InputNumber
+                  size="large"
+                  min={0}
+                  precision={2}
+                  placeholder="Enter salary"
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            ) : (
+              <div />
+            )}
           </div>
         </Form>
       </Modal>

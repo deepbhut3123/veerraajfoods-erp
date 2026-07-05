@@ -6,11 +6,11 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
   Modal,
   Select,
   Space,
   Table,
-  Tag,
   TimePicker,
   Tooltip,
   Typography,
@@ -45,6 +45,10 @@ type AttendanceItem = {
   date: string;
   inTime?: string;
   outTime?: string;
+  breakIn?: string;
+  breakOut?: string;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
   ipAddress?: string;
   user?: {
     _id?: string;
@@ -61,6 +65,7 @@ type UserOption = {
   name: string;
   email: string;
   roleId: number;
+  salary?: number | null;
 };
 
 type AttendanceFormValues = {
@@ -68,7 +73,10 @@ type AttendanceFormValues = {
   date: dayjs.Dayjs;
   inTime: dayjs.Dayjs;
   outTime?: dayjs.Dayjs | null;
-  ipAddress?: string;
+  breakIn?: dayjs.Dayjs | null;
+  breakOut?: dayjs.Dayjs | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 type AttendanceStatementFormValues = {
@@ -82,7 +90,6 @@ const THEME = {
   mid: "#00695C",
   soft: "#E0F7F6",
 };
-const EXPECTED_ATTENDANCE_IP = "192.168.1.105";
 
 const ATTENDANCE_TIME_FORMATS = [
   "YYYY-MM-DD hh:mm A",
@@ -191,6 +198,25 @@ const formatHoursFromMinutes = (value?: number | null) => {
   return `${hours}h ${minutes}m`;
 };
 
+const getDecimalHoursFromMinutes = (value?: number | null) => {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Number(value) / 60;
+};
+
+const formatCurrency = (value?: number | null) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+
+const formatPdfCurrency = (value?: number | null) =>
+  `Rs ${Number(value || 0).toFixed(2)}`;
+
 const AttendancePage: React.FC = () => {
   const [records, setRecords] = useState<AttendanceItem[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
@@ -286,13 +312,24 @@ const AttendancePage: React.FC = () => {
     const attendanceDate = dayjs(item.date);
     const inTime = parseAttendanceDateTime(item.inTime, item.date);
     const outTime = parseAttendanceDateTime(item.outTime, item.date);
+    const breakIn = parseAttendanceDateTime(item.breakIn, item.date);
+    const breakOut = parseAttendanceDateTime(item.breakOut, item.date);
 
     editForm.setFieldsValue({
       userId: item.userId || item.user?._id || item.user?.id || "",
       date: attendanceDate.isValid() ? attendanceDate : dayjs(),
       inTime: inTime && inTime.isValid() ? inTime : dayjs(),
       outTime: outTime && outTime.isValid() ? outTime : null,
-      ipAddress: item.ipAddress || "",
+      breakIn: breakIn && breakIn.isValid() ? breakIn : null,
+      breakOut: breakOut && breakOut.isValid() ? breakOut : null,
+      latitude:
+        item.latitude === null || item.latitude === undefined || item.latitude === ""
+          ? null
+          : Number(item.latitude),
+      longitude:
+        item.longitude === null || item.longitude === undefined || item.longitude === ""
+          ? null
+          : Number(item.longitude),
     });
 
     setEditingItem(item);
@@ -325,7 +362,17 @@ const AttendancePage: React.FC = () => {
         date: values.date.format("YYYY-MM-DD"),
         inTime: values.inTime.format("hh:mm A"),
         outTime: values.outTime ? values.outTime.format("hh:mm A") : undefined,
-        ipAddress: values.ipAddress?.trim() || undefined,
+        breakIn: values.breakIn ? values.breakIn.format("hh:mm A") : undefined,
+        breakOut: values.breakOut ? values.breakOut.format("hh:mm A") : undefined,
+        latitude:
+          values.latitude === null || values.latitude === undefined
+            ? undefined
+            : Number(values.latitude),
+        longitude:
+          values.longitude === null || values.longitude === undefined
+            ? undefined
+            : Number(values.longitude),
+        ipAddress: editingItem.ipAddress?.trim() || undefined,
       });
 
       message.success("Attendance updated successfully");
@@ -392,6 +439,8 @@ const AttendancePage: React.FC = () => {
           sum + (getDurationMinutes(record.inTime, record.outTime, record.date) || 0),
         0,
       );
+      const hourlySalary = Number(staffUser?.salary || 0);
+      const totalSalary = getDecimalHoursFromMinutes(totalMinutes) * hourlySalary;
 
       const doc = new jsPDF({
         orientation: "portrait",
@@ -458,6 +507,11 @@ const AttendancePage: React.FC = () => {
         doc.setFontSize(11);
         doc.setTextColor(71, 85, 105);
         doc.text(monthLabel, marginX, marginTop + 42);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(71, 85, 105);
+        doc.text(`Hourly Salary: ${formatPdfCurrency(hourlySalary)}`, marginX, marginTop + 58);
       };
 
       const drawTableHeader = (y: number) => {
@@ -474,7 +528,7 @@ const AttendancePage: React.FC = () => {
 
       drawHeader();
 
-      let cursorY = marginTop + 64;
+      let cursorY = marginTop + 82;
       drawTableHeader(cursorY);
       cursorY += rowHeight;
 
@@ -488,7 +542,7 @@ const AttendancePage: React.FC = () => {
           if (cursorY + rowHeight > pageHeight - 60) {
             doc.addPage();
             drawHeader();
-            cursorY = marginTop + 64;
+            cursorY = marginTop + 82;
             drawTableHeader(cursorY);
             cursorY += rowHeight;
           }
@@ -515,7 +569,7 @@ const AttendancePage: React.FC = () => {
       if (cursorY + rowHeight > pageHeight - 60) {
         doc.addPage();
         drawHeader();
-        cursorY = marginTop + 64;
+        cursorY = marginTop + 82;
         drawTableHeader(cursorY);
         cursorY += rowHeight;
       }
@@ -528,6 +582,20 @@ const AttendancePage: React.FC = () => {
       });
       totalRowX += colWidths[0] + colWidths[1] + colWidths[2];
       drawCell(totalRowX, cursorY, colWidths[3], rowHeight, formatHoursFromMinutes(totalMinutes), {
+        align: "center",
+        bold: true,
+        fill: [240, 253, 250],
+      });
+
+      cursorY += rowHeight;
+      totalRowX = marginX;
+      drawCell(totalRowX, cursorY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, "Total Salary", {
+        align: "right",
+        bold: true,
+        fill: [240, 253, 250],
+      });
+      totalRowX += colWidths[0] + colWidths[1] + colWidths[2];
+      drawCell(totalRowX, cursorY, colWidths[3], rowHeight, formatPdfCurrency(totalSalary), {
         align: "center",
         bold: true,
         fill: [240, 253, 250],
@@ -590,6 +658,20 @@ const AttendancePage: React.FC = () => {
       render: (value, record) => <Text>{formatTime(value, record.date)}</Text>,
     },
     {
+      title: "Break In",
+      dataIndex: "breakIn",
+      key: "breakIn",
+      width: 180,
+      render: (value, record) => <Text>{formatTime(value, record.date)}</Text>,
+    },
+    {
+      title: "Break Out",
+      dataIndex: "breakOut",
+      key: "breakOut",
+      width: 180,
+      render: (value, record) => <Text>{formatTime(value, record.date)}</Text>,
+    },
+    {
       title: "Out Time",
       dataIndex: "outTime",
       key: "outTime",
@@ -605,32 +687,19 @@ const AttendancePage: React.FC = () => {
       ),
     },
     {
-      title: "IP Address",
-      dataIndex: "ipAddress",
-      key: "ipAddress",
-      width: 150,
-      render: (value) => {
-        const isExpectedIp = !value || value === EXPECTED_ATTENDANCE_IP;
-
-        return (
-          <Tag
-            style={{
-              margin: 0,
-              borderRadius: 999,
-              padding: "4px 12px",
-              border: isExpectedIp
-                ? "1px solid rgba(15, 23, 42, 0.08)"
-                : "1px solid rgba(220, 38, 38, 0.22)",
-              background: isExpectedIp ? "rgba(15, 23, 42, 0.03)" : "rgba(220, 38, 38, 0.08)",
-              color: isExpectedIp ? "#0f172a" : "#b91c1c",
-              fontFamily: "monospace",
-              fontWeight: isExpectedIp ? 500 : 700,
-            }}
-          >
-            {value || "-"}
-          </Tag>
-        );
-      },
+      title: "Location",
+      key: "location",
+      width: 180,
+      render: (_, record) => (
+        <Text>
+          {record.latitude !== null &&
+          record.latitude !== undefined &&
+          record.longitude !== null &&
+          record.longitude !== undefined
+            ? `${record.latitude}, ${record.longitude}`
+            : "-"}
+        </Text>
+      ),
     },
     {
       title: "Actions",
@@ -720,7 +789,7 @@ const AttendancePage: React.FC = () => {
               Attendance
             </Title>
             <Text type="secondary">
-              View mobile-app attendance, in time, out time, and network IP for staff users.
+              View mobile-app attendance, shift timings, break timings, and staff location data.
             </Text>
           </div>
           <Space size={12} wrap>
@@ -778,7 +847,7 @@ const AttendancePage: React.FC = () => {
               size="large"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Search by staff name, email, or IP"
+              placeholder="Search by staff name or email"
               prefix={<SearchOutlined style={{ color: "#94a3b8" }} />}
               style={{ borderRadius: 12 }}
             />
@@ -818,11 +887,6 @@ const AttendancePage: React.FC = () => {
             columns={columns}
             pagination={false}
             scroll={{ x: "max-content", y: 420 }}
-            rowClassName={(record) =>
-              record.ipAddress && record.ipAddress !== EXPECTED_ATTENDANCE_IP
-                ? "attendance-alert-row"
-                : ""
-            }
           />
         )}
       </Card>
@@ -834,7 +898,7 @@ const AttendancePage: React.FC = () => {
               Edit Attendance
             </span>
             <span style={{ color: "#64748b", fontSize: 13, fontWeight: 400 }}>
-              Update staff, date, timings, and network IP for this attendance entry
+              Update staff, date, timings, break slots, and location for this attendance entry
             </span>
           </div>
         }
@@ -945,17 +1009,73 @@ const AttendancePage: React.FC = () => {
           </div>
 
           <div style={{ marginTop: 16 }}>
-            <Form.Item
-              label="IP Address"
-              name="ipAddress"
-              style={{ marginBottom: 0 }}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 16,
+              }}
             >
-              <Input
-                size="large"
-                placeholder="Enter IP address"
-                style={{ borderRadius: 12 }}
-              />
-            </Form.Item>
+              <Form.Item
+                label="Break In"
+                name="breakIn"
+                style={{ marginBottom: 0 }}
+              >
+                <TimePicker
+                  size="large"
+                  use12Hours
+                  format="hh:mm A"
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+
+              <Form.Item
+                label="Break Out"
+                name="breakOut"
+                style={{ marginBottom: 0 }}
+              >
+                <TimePicker
+                  size="large"
+                  use12Hours
+                  format="hh:mm A"
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 16,
+              }}
+            >
+              <Form.Item
+                label="Latitude"
+                name="latitude"
+                style={{ marginBottom: 0 }}
+              >
+                <InputNumber
+                  size="large"
+                  placeholder="Enter latitude"
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+
+              <Form.Item
+                label="Longitude"
+                name="longitude"
+                style={{ marginBottom: 0 }}
+              >
+                <InputNumber
+                  size="large"
+                  placeholder="Enter longitude"
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </div>
           </div>
         </Form>
       </Modal>

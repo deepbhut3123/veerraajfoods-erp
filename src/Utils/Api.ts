@@ -573,6 +573,7 @@ export const addUser = async (data: {
   email: string;
   password: string;
   roleId: number;
+  salary?: number | null;
   isActive?: boolean;
 }) => {
   try {
@@ -590,6 +591,7 @@ export const updateUser = async (
     email?: string;
     password?: string;
     roleId?: number;
+    salary?: number | null;
     isActive?: boolean;
   },
 ) => {
@@ -640,11 +642,204 @@ export const updateAdminAttendance = async (
     date: string;
     inTime: string;
     outTime?: string;
+    breakIn?: string;
+    breakOut?: string;
+    latitude?: number;
+    longitude?: number;
     ipAddress?: string;
   },
 ) => {
   try {
     const response = await API.put(`/admin/attendance/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllAdminStockEntries = async () => {
+  try {
+    const response = await API.get("/admin/retailer/stocks");
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAdminStockEntryById = async (id: string) => {
+  try {
+    const response = await API.get(`/admin/retailer/stocks/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const createAdminStockEntry = async (data: {
+  entryDate: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+}) => {
+  try {
+    const response = await API.post("/admin/retailer/stocks", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateAdminStockEntry = async (
+  id: string,
+  data: {
+    entryDate: string;
+    items: Array<{
+      productId: string;
+      quantity: number;
+    }>;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/retailer/stocks/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteAdminStockEntry = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/retailer/stocks/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllPurchases = async (params?: { search?: string }) => {
+  try {
+    const response = await API.get("/admin/expenses/purchases", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getPurchaseById = async (id: string) => {
+  try {
+    const response = await API.get(`/admin/expenses/purchases/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const createPurchase = async (data: {
+  purchaseDate: string;
+  items: Array<{
+    productName: string;
+    qtyKg: number;
+    rate: number;
+    tax: number;
+    transport: number;
+  }>;
+}) => {
+  try {
+    const response = await API.post("/admin/expenses/purchases", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updatePurchase = async (
+  id: string,
+  data: {
+    purchaseDate: string;
+    items: Array<{
+      productName: string;
+      qtyKg: number;
+      rate: number;
+      tax: number;
+      transport: number;
+    }>;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/expenses/purchases/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deletePurchase = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/expenses/purchases/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllExpenseEntries = async (params?: {
+  search?: string;
+  expenseType?: string;
+}) => {
+  try {
+    const response = await API.get("/admin/expenses/entries", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getExpenseEntryById = async (id: string) => {
+  try {
+    const response = await API.get(`/admin/expenses/entries/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const createExpenseEntry = async (data: {
+  expenseDate: string;
+  expenseType: string;
+  reason?: string;
+  paymentType: "cash" | "online" | "bank";
+  amount: number;
+}) => {
+  try {
+    const response = await API.post("/admin/expenses/entries", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateExpenseEntry = async (
+  id: string,
+  data: {
+    expenseDate: string;
+    expenseType: string;
+    reason?: string;
+    paymentType: "cash" | "online" | "bank";
+    amount: number;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/expenses/entries/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteExpenseEntry = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/expenses/entries/${id}`);
     return response.data;
   } catch (error) {
     throw error;

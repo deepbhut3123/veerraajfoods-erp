@@ -5,14 +5,22 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   AuditOutlined,
   AppstoreOutlined,
+  BarChartOutlined,
+  BankOutlined,
+  BorderOutlined,
   ClockCircleOutlined,
+  CreditCardOutlined,
   DashboardOutlined,
   DatabaseOutlined,
   DollarCircleOutlined,
   FileTextOutlined,
+  NodeIndexOutlined,
+  InboxOutlined,
+  ShoppingCartOutlined,
   ShopOutlined,
-  SnippetsOutlined,
+  SolutionOutlined,
   TeamOutlined,
+  TransactionOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import "../MasterLayout/Master.css";
@@ -43,25 +51,19 @@ const MENU_ITEMS: SidebarMenuItem[] = [
     link: "/dashboard",
   },
   {
-    key: "attendance",
-    icon: <ClockCircleOutlined style={{ color: "inherit" }} />,
-    text: "Attendance",
-    link: "/attendance",
-  },
-  {
     key: "retailer-group",
     icon: <ShopOutlined style={{ color: "inherit" }} />,
     text: "Retailer",
     children: [
       {
         key: "routes",
-        icon: <SnippetsOutlined style={{ color: "inherit" }} />,
+        icon: <NodeIndexOutlined style={{ color: "inherit" }} />,
         text: "Routes",
         link: "/routes",
       },
       {
         key: "shops",
-        icon: <ShopOutlined style={{ color: "inherit" }} />,
+        icon: <BankOutlined style={{ color: "inherit" }} />,
         text: "Shops",
         link: "/shops",
       },
@@ -86,7 +88,7 @@ const MENU_ITEMS: SidebarMenuItem[] = [
     children: [
       {
         key: "dealers",
-        icon: <TeamOutlined style={{ color: "inherit" }} />,
+        icon: <SolutionOutlined style={{ color: "inherit" }} />,
         text: "Dealers",
         link: "/dealers",
       },
@@ -98,13 +100,13 @@ const MENU_ITEMS: SidebarMenuItem[] = [
       },
       {
         key: "dealer-bills",
-        icon: <FileTextOutlined style={{ color: "inherit" }} />,
+        icon: <BorderOutlined style={{ color: "inherit" }} />,
         text: "Bills",
         link: "/dealer-bills",
       },
       {
         key: "dealer-payments",
-        icon: <DollarCircleOutlined style={{ color: "inherit" }} />,
+        icon: <CreditCardOutlined style={{ color: "inherit" }} />,
         text: "Payments",
         link: "/dealer-payments",
       },
@@ -115,6 +117,50 @@ const MENU_ITEMS: SidebarMenuItem[] = [
         link: "/dealer-statement",
       },
     ],
+  },
+  {
+    key: "stocks-group",
+    icon: <InboxOutlined style={{ color: "inherit" }} />,
+    text: "Stocks",
+    children: [
+      {
+        key: "stocks-dashboard",
+        icon: <BarChartOutlined style={{ color: "inherit" }} />,
+        text: "Stock Dashboard",
+        link: "/stocks-dashboard",
+      },
+      {
+        key: "stocks-entry",
+        icon: <DatabaseOutlined style={{ color: "inherit" }} />,
+        text: "Stocks Entry",
+        link: "/stocks-entry",
+      },
+    ],
+  },
+  {
+    key: "expense-group",
+    icon: <DollarCircleOutlined style={{ color: "inherit" }} />,
+    text: "Expense",
+    children: [
+      {
+        key: "expense-purchases",
+        icon: <ShoppingCartOutlined style={{ color: "inherit" }} />,
+        text: "Purchase",
+        link: "/expense-purchases",
+      },
+      {
+        key: "expense-entries",
+        icon: <TransactionOutlined style={{ color: "inherit" }} />,
+        text: "Expense Entry",
+        link: "/expense-entries",
+      },
+    ],
+  },
+  {
+    key: "attendance",
+    icon: <ClockCircleOutlined style={{ color: "inherit" }} />,
+    text: "Attendance",
+    link: "/attendance",
   },
   {
     key: "users",
@@ -224,6 +270,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       "/dealer-bills": "Dealer Bills",
       "/dealer-payments": "Dealer Payments",
       "/dealer-statement": "Dealer Statement",
+      "/stocks-dashboard": "Stocks Dashboard",
+      "/stocks-entry": "Stocks Entry",
+      "/expense-purchases": "Purchase",
+      "/expense-entries": "Expense Entry",
       "/users": "Users",
     };
 
