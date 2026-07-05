@@ -80,12 +80,6 @@ const formatPlainNumber = (value?: number) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
 
-const formatDate = (value?: string) => {
-  if (!value) return "-";
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format("DD MMM YYYY") : value;
-};
-
 const getProductIdValue = (productId?: StockEntryItem["productId"]) =>
   typeof productId === "object" ? productId?._id || productId?.id || "" : productId || "";
 
