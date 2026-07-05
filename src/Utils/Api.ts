@@ -657,6 +657,15 @@ export const updateAdminAttendance = async (
   }
 };
 
+export const deleteAdminAttendance = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/attendance/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const getAllAdminStockEntries = async () => {
   try {
     const response = await API.get("/admin/retailer/stocks");
@@ -777,6 +786,24 @@ export const updatePurchase = async (
 export const deletePurchase = async (id: string) => {
   try {
     const response = await API.delete(`/admin/expenses/purchases/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllPurchaseProducts = async (params?: { search?: string }) => {
+  try {
+    const response = await API.get("/admin/expenses/purchase-products", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const createPurchaseProduct = async (data: { productName: string }) => {
+  try {
+    const response = await API.post("/admin/expenses/purchase-products", data);
     return response.data;
   } catch (error) {
     throw error;

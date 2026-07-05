@@ -3,12 +3,13 @@ import {
   Button,
   Card,
   DatePicker,
+  Divider,
   Empty,
   Form,
-  Input,
   InputNumber,
   Modal,
   Popconfirm,
+  Select,
   Space,
   Table,
   Tooltip,
@@ -19,8 +20,10 @@ import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import {
+  createPurchaseProduct,
   createPurchase,
   deletePurchase,
+  getAllPurchaseProducts,
   getAllPurchases,
   getPurchaseById,
   updatePurchase,
@@ -60,6 +63,12 @@ type PurchaseFormValues = {
     tax?: number;
     transport?: number;
   }>;
+};
+
+type PurchaseProductOption = {
+  _id?: string;
+  id?: string;
+  productName: string;
 };
 
 const THEME = {
@@ -119,7 +128,36 @@ const ExpensePurchasesPage: React.FC = () => {
   const [editingItem, setEditingItem] = useState<PurchaseRow | null>(null);
   const [activePurchase, setActivePurchase] = useState<PurchaseRow | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [purchaseProducts, setPurchaseProducts] = useState<PurchaseProductOption[]>([]);
+  const [savingPurchaseProduct, setSavingPurchaseProduct] = useState(false);
+  const [productSearchText, setProductSearchText] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState<string>(dayjs().format("YYYY-MM"));
+  const [selectedProductFilter, setSelectedProductFilter] = useState<string>("all");
   const [form] = Form.useForm<PurchaseFormValues>();
+
+  const appendPurchaseProductOption = (productName?: string) => {
+    const normalized = String(productName || "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    setPurchaseProducts((previous) => {
+      const exists = previous.some(
+        (item) => item.productName.trim().toLowerCase() === normalized.toLowerCase(),
+      );
+
+      if (exists) {
+        return previous;
+      }
+
+      return [
+        ...previous,
+        {
+          productName: normalized,
+        },
+      ].sort((left, right) => left.productName.localeCompare(right.productName));
+    });
+  };
 
   const loadPurchases = async () => {
     setLoading(true);
@@ -135,6 +173,21 @@ const ExpensePurchasesPage: React.FC = () => {
 
   useEffect(() => {
     void loadPurchases();
+  }, []);
+
+  useEffect(() => {
+    const loadPurchaseProducts = async () => {
+      try {
+        const response = await getAllPurchaseProducts();
+        setPurchaseProducts(Array.isArray(response?.data) ? response.data : []);
+      } catch (err: any) {
+        message.error(
+          err?.response?.data?.message || err?.message || "Failed to load purchase products",
+        );
+      }
+    };
+
+    void loadPurchaseProducts();
   }, []);
 
   const openCreate = () => {
@@ -158,6 +211,7 @@ const ExpensePurchasesPage: React.FC = () => {
     try {
       const response = await getPurchaseById(purchaseId);
       const purchase = response?.data as PurchaseRow;
+      (purchase.items || []).forEach((item) => appendPurchaseProductOption(item.productName));
       setEditingItem(purchase);
       form.setFieldsValue({
         purchaseDate: dayjs(purchase.purchaseDate),
@@ -250,6 +304,39 @@ const ExpensePurchasesPage: React.FC = () => {
   };
 
   const watchedItems = Form.useWatch("items", form);
+  const purchaseProductOptions = purchaseProducts.map((item) => ({
+    value: item.productName,
+    label: item.productName,
+  }));
+  const normalizedProductSearch = productSearchText.trim();
+  const canCreatePurchaseProduct =
+    Boolean(normalizedProductSearch) &&
+    !purchaseProducts.some(
+      (item) => item.productName.trim().toLowerCase() === normalizedProductSearch.toLowerCase(),
+    );
+
+  const handleCreatePurchaseProduct = async () => {
+    const productName = normalizedProductSearch;
+    if (!productName || !canCreatePurchaseProduct) {
+      return;
+    }
+
+    setSavingPurchaseProduct(true);
+    try {
+      const response = await createPurchaseProduct({ productName });
+      const created = response?.data as PurchaseProductOption | undefined;
+      const nextName = String(created?.productName || productName).trim();
+      appendPurchaseProductOption(nextName);
+      setProductSearchText("");
+      message.success("Purchase product added successfully");
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to add purchase product",
+      );
+    } finally {
+      setSavingPurchaseProduct(false);
+    }
+  };
 
   const draftTotal = useMemo(
     () =>
@@ -258,6 +345,55 @@ const ExpensePurchasesPage: React.FC = () => {
         return sum + line.total;
       }, 0),
     [watchedItems],
+  );
+
+  const filteredData = useMemo(
+    () =>
+      data.filter((record) => {
+        const matchesMonth = dayjs(record.purchaseDate).isValid()
+          ? dayjs(record.purchaseDate).format("YYYY-MM") === selectedMonth
+          : false;
+        const matchesProduct =
+          selectedProductFilter === "all" ||
+          (record.items || []).some(
+            (item) =>
+              String(item.productName || "").trim().toLowerCase() ===
+              selectedProductFilter.trim().toLowerCase(),
+          );
+
+        return matchesMonth && matchesProduct;
+      }),
+    [data, selectedMonth, selectedProductFilter],
+  );
+
+  const monthFilteredData = useMemo(
+    () =>
+      data.filter((record) => {
+        const parsed = dayjs(record.purchaseDate);
+        return parsed.isValid() && parsed.format("YYYY-MM") === selectedMonth;
+      }),
+    [data, selectedMonth],
+  );
+
+  const visibleTotalAmount = useMemo(
+    () => {
+      if (selectedProductFilter === "all") {
+        return filteredData.reduce((sum, record) => sum + Number(record.totalAmount || 0), 0);
+      }
+
+      return monthFilteredData.reduce((sum, record) => {
+        const productTotal = (record.items || []).reduce((itemSum, item) => {
+          const matchesProduct =
+            String(item.productName || "").trim().toLowerCase() ===
+            selectedProductFilter.trim().toLowerCase();
+
+          return matchesProduct ? itemSum + Number(item.total || 0) : itemSum;
+        }, 0);
+
+        return sum + productTotal;
+      }, 0);
+    },
+    [filteredData, monthFilteredData, selectedProductFilter],
   );
 
   const columns: ColumnsType<PurchaseRow> = [
@@ -367,26 +503,67 @@ const ExpensePurchasesPage: React.FC = () => {
             </Text>
           </div>
 
-          <Button
-            icon={<PlusOutlined />}
-            onClick={openCreate}
-            style={{
-              height: 42,
-              paddingInline: 18,
-              borderRadius: 12,
-              border: "none",
-              color: "#fff",
-              fontWeight: 700,
-              background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
-            }}
-          >
-            Add Purchase
-          </Button>
+          <Space size={12} wrap>
+            <div
+              style={{
+                padding: "10px 16px",
+                borderRadius: 16,
+                border: "1px solid rgba(0, 105, 92, 0.12)",
+                background: "linear-gradient(135deg, rgba(224, 247, 246, 0.92) 0%, rgba(240, 253, 250, 0.98) 100%)",
+                minWidth: 180,
+              }}
+            >
+              <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                Purchase Total
+              </Text>
+              <Text strong style={{ color: THEME.mid, fontSize: 20 }}>
+                {formatCurrency(visibleTotalAmount)}
+              </Text>
+            </div>
+
+            <DatePicker
+              picker="month"
+              size="large"
+              value={dayjs(`${selectedMonth}-01`)}
+              onChange={(value) => setSelectedMonth((value || dayjs()).format("YYYY-MM"))}
+              format="MMMM YYYY"
+              allowClear={false}
+              style={{ minWidth: 180 }}
+            />
+
+            <Select
+              size="large"
+              value={selectedProductFilter}
+              onChange={setSelectedProductFilter}
+              style={{ minWidth: 220 }}
+              options={[
+                { value: "all", label: "All Products" },
+                ...purchaseProductOptions,
+              ]}
+              placeholder="Filter by product"
+            />
+
+            <Button
+              icon={<PlusOutlined />}
+              onClick={openCreate}
+              style={{
+                height: 42,
+                paddingInline: 18,
+                borderRadius: 12,
+                border: "none",
+                color: "#fff",
+                fontWeight: 700,
+                background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+              }}
+            >
+              Add Purchase
+            </Button>
+          </Space>
         </Space>
 
         <Table
           rowKey={(record) => getPurchaseId(record)}
-          dataSource={data}
+          dataSource={filteredData}
           columns={columns}
           loading={loading}
           pagination={false}
@@ -500,7 +677,44 @@ const ExpensePurchasesPage: React.FC = () => {
                         rules={[{ required: true, message: "Enter product" }]}
                         style={{ marginBottom: 0 }}
                       >
-                        <Input size="large" placeholder="Enter product name" />
+                        <Select
+                          size="large"
+                          showSearch
+                          options={purchaseProductOptions}
+                          placeholder="Select or search product"
+                          filterOption={(input, option) =>
+                            String(option?.label || "")
+                              .toLowerCase()
+                              .includes(input.toLowerCase())
+                          }
+                          onSearch={setProductSearchText}
+                          onDropdownVisibleChange={(open) => {
+                            if (!open) {
+                              setProductSearchText("");
+                            }
+                          }}
+                          dropdownRender={(menu) => (
+                            <>
+                              {menu}
+                              {canCreatePurchaseProduct ? (
+                                <>
+                                  <Divider style={{ margin: "8px 0" }} />
+                                  <div style={{ padding: "0 8px 8px" }}>
+                                    <Button
+                                      type="dashed"
+                                      block
+                                      onMouseDown={(event) => event.preventDefault()}
+                                      onClick={() => void handleCreatePurchaseProduct()}
+                                      loading={savingPurchaseProduct}
+                                    >
+                                      Add "{normalizedProductSearch}"
+                                    </Button>
+                                  </div>
+                                </>
+                              ) : null}
+                            </>
+                          )}
+                        />
                       </Form.Item>
 
                       <Form.Item
@@ -623,7 +837,7 @@ const ExpensePurchasesPage: React.FC = () => {
                   <Text type="secondary">Purchase No</Text>
                   <div>
                     <Text strong style={{ fontSize: 18 }}>
-                      {data.findIndex((item) => getPurchaseId(item) === getPurchaseId(activePurchase)) + 1}
+                      {filteredData.findIndex((item) => getPurchaseId(item) === getPurchaseId(activePurchase)) + 1}
                     </Text>
                   </div>
                 </div>

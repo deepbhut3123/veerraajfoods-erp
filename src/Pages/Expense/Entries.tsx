@@ -92,6 +92,7 @@ const ExpenseEntriesPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<ExpenseEntryRow | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>(dayjs().format("YYYY-MM"));
   const [selectedExpenseType, setSelectedExpenseType] = useState<string>("all");
   const [form] = Form.useForm<ExpenseEntryFormValues>();
   const watchedExpenseType = Form.useWatch("expenseType", form);
@@ -102,13 +103,19 @@ const ExpenseEntriesPage: React.FC = () => {
       const response = await getAllExpenseEntries({
         expenseType: selectedExpenseType === "all" ? undefined : selectedExpenseType,
       });
-      setData(Array.isArray(response?.data) ? response.data : []);
+      const entries = Array.isArray(response?.data) ? response.data : [];
+      setData(
+        entries.filter((entry: ExpenseEntryRow) => {
+          const parsed = dayjs(entry?.expenseDate);
+          return parsed.isValid() && parsed.format("YYYY-MM") === selectedMonth;
+        }),
+      );
     } catch (err: any) {
       message.error(err?.response?.data?.message || err?.message || "Failed to load expense entries");
     } finally {
       setLoading(false);
     }
-  }, [selectedExpenseType]);
+  }, [selectedExpenseType, selectedMonth]);
 
   useEffect(() => {
     void loadEntries();
@@ -278,6 +285,8 @@ const ExpenseEntriesPage: React.FC = () => {
     },
   ];
 
+  const visibleTotalAmount = data.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+
   return (
     <div
       style={{
@@ -317,6 +326,33 @@ const ExpenseEntriesPage: React.FC = () => {
           </div>
 
           <Space size={12} wrap>
+            <div
+              style={{
+                padding: "10px 16px",
+                borderRadius: 16,
+                border: "1px solid rgba(0, 105, 92, 0.12)",
+                background: "linear-gradient(135deg, rgba(224, 247, 246, 0.92) 0%, rgba(240, 253, 250, 0.98) 100%)",
+                minWidth: 180,
+              }}
+            >
+              <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                Expense Total
+              </Text>
+              <Text strong style={{ color: THEME.mid, fontSize: 20 }}>
+                {formatCurrency(visibleTotalAmount)}
+              </Text>
+            </div>
+
+            <DatePicker
+              picker="month"
+              size="large"
+              value={dayjs(`${selectedMonth}-01`)}
+              onChange={(value) => setSelectedMonth((value || dayjs()).format("YYYY-MM"))}
+              format="MMMM YYYY"
+              allowClear={false}
+              style={{ minWidth: 180 }}
+            />
+
             <Select
               size="large"
               value={selectedExpenseType}
@@ -387,13 +423,7 @@ const ExpenseEntriesPage: React.FC = () => {
         destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 16,
-            }}
-          >
+          <div style={{ display: "grid", gap: 16 }}>
             <Form.Item
               label="Date"
               name="expenseDate"
@@ -412,14 +442,20 @@ const ExpenseEntriesPage: React.FC = () => {
               <Select size="large" options={EXPENSE_OPTIONS} placeholder="Select expense type" />
             </Form.Item>
 
-            <Form.Item
-              label="Payment Type"
-              name="paymentType"
-              rules={[{ required: true, message: "Please select payment type" }]}
-              style={{ marginBottom: 0 }}
-            >
-              <Select size="large" options={PAYMENT_OPTIONS} placeholder="Select payment type" />
-            </Form.Item>
+            {watchedExpenseType === "other" ? (
+              <Form.Item
+                label="Reason"
+                name="reason"
+                rules={[{ required: true, message: "Please enter reason" }]}
+                style={{ marginBottom: 0 }}
+              >
+                <Input
+                  size="large"
+                  placeholder="Enter reason"
+                  style={{ width: "100%", borderRadius: 8, borderColor: "#d9d9d9" }}
+                />
+              </Form.Item>
+            ) : null}
 
             <Form.Item
               label="Amount"
@@ -430,16 +466,14 @@ const ExpenseEntriesPage: React.FC = () => {
               <InputNumber size="large" min={0} style={{ width: "100%" }} placeholder="Enter amount" />
             </Form.Item>
 
-            {watchedExpenseType === "other" ? (
-              <Form.Item
-                label="Reason"
-                name="reason"
-                rules={[{ required: true, message: "Please enter reason" }]}
-                style={{ marginBottom: 0, gridColumn: "1 / -1" }}
-              >
-                <Input size="large" placeholder="Enter reason" />
-              </Form.Item>
-            ) : null}
+            <Form.Item
+              label="Payment Type"
+              name="paymentType"
+              rules={[{ required: true, message: "Please select payment type" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <Select size="large" options={PAYMENT_OPTIONS} placeholder="Select payment type" />
+            </Form.Item>
           </div>
         </Form>
       </Modal>

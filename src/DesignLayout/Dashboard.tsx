@@ -6,6 +6,9 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,6 +19,8 @@ import {
   getAllAdminBills,
   getAllDealers,
   getAllDealerBills,
+  getAllExpenseEntries,
+  getAllPurchases,
 } from "../Utils/Api";
 
 const { Title, Text } = Typography;
@@ -263,6 +268,22 @@ type RevenueMonthRow = {
   totalRevenue: number;
   dealerRevenue: number;
   retailerRevenue: number;
+};
+
+type ExpenseEntryItem = {
+  expenseDate?: string;
+  amount?: number;
+};
+
+type PurchaseEntryItem = {
+  purchaseDate?: string;
+  totalAmount?: number;
+};
+
+type ExpensePurchaseMonthRow = {
+  month: string;
+  expenseAmount: number;
+  purchaseAmount: number;
 };
 
 const polarToCartesian = (cx: number, cy: number, radius: number, angleInDegrees: number) => {
@@ -617,20 +638,65 @@ const RevenueTooltip = ({
   );
 };
 
+const ExpensePurchaseTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: ExpensePurchaseMonthRow }>;
+  label?: string;
+}) => {
+  if (!active || !payload?.length) return null;
+
+  const row = payload[0]?.payload;
+  if (!row) return null;
+
+  return (
+    <div
+      style={{
+        borderRadius: 16,
+        padding: 12,
+        background: "rgba(15, 23, 42, 0.94)",
+        boxShadow: "0 18px 34px rgba(15, 23, 42, 0.24)",
+        border: "1px solid rgba(148, 163, 184, 0.18)",
+      }}
+    >
+      <Text style={{ color: "rgba(255,255,255,0.72)", fontSize: 11 }}>{label}</Text>
+      <div style={{ marginTop: 6, fontSize: 20, fontWeight: 800, color: "#ffffff" }}>
+        {formatRoundedCurrency(row.expenseAmount + row.purchaseAmount)}
+      </div>
+      <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+        <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 11 }}>
+          Expense: {formatRoundedCurrency(row.expenseAmount)}
+        </Text>
+        <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 11 }}>
+          Purchase: {formatRoundedCurrency(row.purchaseAmount)}
+        </Text>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary>(defaultSummary);
   const [retailerBills, setRetailerBills] = useState<RetailerBillItem[]>([]);
   const [dealerBills, setDealerBills] = useState<DealerBillItem[]>([]);
   const [revenueRetailerBills, setRevenueRetailerBills] = useState<RetailerBillItem[]>([]);
   const [revenueDealerBills, setRevenueDealerBills] = useState<DealerBillItem[]>([]);
+  const [expenseYearEntries, setExpenseYearEntries] = useState<ExpenseEntryItem[]>([]);
+  const [purchaseYearEntries, setPurchaseYearEntries] = useState<PurchaseEntryItem[]>([]);
   const [allDealersCount, setAllDealersCount] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(now.month() + 1);
   const [selectedYear, setSelectedYear] = useState(now.year());
   const [revenueYear, setRevenueYear] = useState(now.year());
+  const [expenseChartYear, setExpenseChartYear] = useState(now.year());
   const [loading, setLoading] = useState(true);
   const [revenueLoading, setRevenueLoading] = useState(true);
+  const [expenseChartLoading, setExpenseChartLoading] = useState(true);
   const [error, setError] = useState("");
   const [revenueError, setRevenueError] = useState("");
+  const [expenseChartError, setExpenseChartError] = useState("");
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -704,10 +770,38 @@ const Dashboard: React.FC = () => {
     void loadRevenue();
   }, [revenueYear]);
 
+  useEffect(() => {
+    const loadExpensePurchaseChart = async () => {
+      setExpenseChartLoading(true);
+      setExpenseChartError("");
+
+      try {
+        const [expenseRes, purchaseRes] = await Promise.all([
+          getAllExpenseEntries(),
+          getAllPurchases(),
+        ]);
+
+        setExpenseYearEntries(Array.isArray(expenseRes?.data) ? expenseRes.data : []);
+        setPurchaseYearEntries(Array.isArray(purchaseRes?.data) ? purchaseRes.data : []);
+      } catch (err: any) {
+        setExpenseChartError(
+          err?.response?.data?.message ||
+            err?.message ||
+            "Failed to load expense and purchase chart data",
+        );
+      } finally {
+        setExpenseChartLoading(false);
+      }
+    };
+
+    void loadExpensePurchaseChart();
+  }, [expenseChartYear]);
+
   const yearOptions = useMemo(() => {
     const yearSet = new Set<number>(summary.availableYears?.length ? summary.availableYears : []);
     yearSet.add(selectedYear);
     yearSet.add(revenueYear);
+    yearSet.add(expenseChartYear);
 
     retailerBills.forEach((bill) => {
       const parsed = toDate(bill.createdAt || bill.updatedAt);
@@ -723,13 +817,36 @@ const Dashboard: React.FC = () => {
       }
     });
 
+    expenseYearEntries.forEach((entry) => {
+      const parsed = toDate(entry.expenseDate);
+      if (parsed) {
+        yearSet.add(parsed.year());
+      }
+    });
+
+    purchaseYearEntries.forEach((entry) => {
+      const parsed = toDate(entry.purchaseDate);
+      if (parsed) {
+        yearSet.add(parsed.year());
+      }
+    });
+
     return Array.from(yearSet)
       .sort((a, b) => b - a)
       .map((year) => ({
         value: year,
         label: String(year),
       }));
-  }, [dealerBills, retailerBills, revenueYear, selectedYear, summary.availableYears]);
+  }, [
+    dealerBills,
+    expenseChartYear,
+    expenseYearEntries,
+    purchaseYearEntries,
+    retailerBills,
+    revenueYear,
+    selectedYear,
+    summary.availableYears,
+  ]);
 
   const filteredRetailerBills = useMemo(
     () =>
@@ -815,6 +932,39 @@ const Dashboard: React.FC = () => {
   const totalRevenueAmount = useMemo(
     () => revenueChartData.reduce((sum, row) => sum + row.totalRevenue, 0),
     [revenueChartData],
+  );
+
+  const expensePurchaseChartData = useMemo(() => {
+    const monthlyExpenseTotals = Array.from({ length: 12 }, () => 0);
+    const monthlyPurchaseTotals = Array.from({ length: 12 }, () => 0);
+
+    expenseYearEntries.forEach((entry) => {
+      const parsed = toDate(entry.expenseDate);
+      if (!parsed || parsed.year() !== expenseChartYear) return;
+      monthlyExpenseTotals[parsed.month()] += Number(entry.amount || 0);
+    });
+
+    purchaseYearEntries.forEach((entry) => {
+      const parsed = toDate(entry.purchaseDate);
+      if (!parsed || parsed.year() !== expenseChartYear) return;
+      monthlyPurchaseTotals[parsed.month()] += Number(entry.totalAmount || 0);
+    });
+
+    return monthShortLabels.map((month, index) => ({
+      month,
+      expenseAmount: monthlyExpenseTotals[index],
+      purchaseAmount: monthlyPurchaseTotals[index],
+    }));
+  }, [expenseChartYear, expenseYearEntries, purchaseYearEntries]);
+
+  const totalExpenseChartAmount = useMemo(
+    () => expensePurchaseChartData.reduce((sum, row) => sum + row.expenseAmount, 0),
+    [expensePurchaseChartData],
+  );
+
+  const totalPurchaseChartAmount = useMemo(
+    () => expensePurchaseChartData.reduce((sum, row) => sum + row.purchaseAmount, 0),
+    [expensePurchaseChartData],
   );
 
   const cards = [
@@ -1194,6 +1344,187 @@ const Dashboard: React.FC = () => {
                       }}
                     >
                       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No revenue data found for this year" />
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              <Card
+                bordered={false}
+                style={{
+                  borderRadius: 18,
+                  border: "1px solid rgba(124, 58, 237, 0.1)",
+                  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.05)",
+                  background: "linear-gradient(180deg, #ffffff 0%, #fbf8ff 100%)",
+                  overflow: "hidden",
+                }}
+                bodyStyle={{ padding: 0 }}
+              >
+                <div
+                  style={{
+                    padding: 12,
+                    borderBottom: "1px solid rgba(226, 232, 240, 0.9)",
+                    background:
+                      "linear-gradient(135deg, rgba(250,245,255,0.96) 0%, rgba(239,246,255,0.95) 100%)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <Title level={5} style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>
+                        Expense vs Purchase
+                      </Title>
+                      <Text style={{ color: "#64748b", fontSize: 12 }}>
+                        Monthly total comparison of expense entries and purchase entries.
+                      </Text>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "flex-end",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        marginLeft: "auto",
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 14,
+                          background: "#ffffff",
+                          border: "1px solid rgba(148, 163, 184, 0.14)",
+                          minWidth: 250,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 2 }}>
+                          <Text style={{ fontSize: 10, color: "#64748b" }}>Expense Total</Text>
+                          <div style={{ fontWeight: 800, color: "#c2410c", fontSize: 14 }}>
+                            {formatRoundedCurrency(totalExpenseChartAmount)}
+                          </div>
+                        </div>
+                        <div style={{ display: "grid", gap: 2, textAlign: "right" }}>
+                          <Text style={{ fontSize: 10, color: "#64748b" }}>Purchase Total</Text>
+                          <div style={{ fontWeight: 800, color: "#0f766e", fontSize: 14 }}>
+                            {formatRoundedCurrency(totalPurchaseChartAmount)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ width: 118 }}>
+                        <Select
+                          size="middle"
+                          value={expenseChartYear}
+                          onChange={setExpenseChartYear}
+                          options={yearOptions}
+                          style={{ width: "100%" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ padding: 14 }}>
+                  {expenseChartLoading ? (
+                    <div style={{ minHeight: 320, display: "grid", placeItems: "center" }}>
+                      <Spin size="large" />
+                    </div>
+                  ) : expenseChartError ? (
+                    <Alert type="error" showIcon message={expenseChartError} />
+                  ) : expensePurchaseChartData.some(
+                      (row) => row.expenseAmount > 0 || row.purchaseAmount > 0,
+                    ) ? (
+                    <div
+                      style={{
+                        height: 360,
+                        borderRadius: 18,
+                        border: "1px solid rgba(226, 232, 240, 0.88)",
+                        background:
+                          "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+                        padding: 12,
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={expensePurchaseChartData}
+                          margin={{ top: 10, right: 16, left: 4, bottom: 6 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="rgba(148, 163, 184, 0.22)"
+                            vertical={false}
+                          />
+                          <XAxis
+                            dataKey="month"
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fill: "#64748b", fontSize: 12, fontWeight: 600 }}
+                          />
+                          <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            width={72}
+                            tick={{ fill: "#64748b", fontSize: 12, fontWeight: 600 }}
+                            tickFormatter={(value) => formatRoundedCurrency(Number(value))}
+                          />
+                          <Tooltip
+                            content={<ExpensePurchaseTooltip />}
+                            cursor={{ stroke: "rgba(99, 102, 241, 0.18)", strokeWidth: 2 }}
+                          />
+                          <Legend />
+                          <Line
+                            type="monotone"
+                            dataKey="expenseAmount"
+                            name="Expense"
+                            stroke="#c2410c"
+                            strokeWidth={3}
+                            dot={false}
+                            activeDot={false}
+                            animationDuration={900}
+                            animationEasing="ease-out"
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="purchaseAmount"
+                            name="Purchase"
+                            stroke="#0f766e"
+                            strokeWidth={3}
+                            dot={false}
+                            activeDot={false}
+                            animationDuration={900}
+                            animationEasing="ease-out"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        minHeight: 320,
+                        display: "grid",
+                        placeItems: "center",
+                        borderRadius: 18,
+                        border: "1px solid rgba(226, 232, 240, 0.88)",
+                        background:
+                          "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+                      }}
+                    >
+                      <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description="No expense or purchase data found for this year"
+                      />
                     </div>
                   )}
                 </div>

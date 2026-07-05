@@ -8,6 +8,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Popconfirm,
   Select,
   Space,
   Table,
@@ -21,12 +22,14 @@ import dayjs from "dayjs";
 import jsPDF from "jspdf";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import {
+  DeleteOutlined,
   EditOutlined,
   FilePdfOutlined,
   ReloadOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import {
+  deleteAdminAttendance,
   getAdminAttendance,
   getAllUsers,
   updateAdminAttendance,
@@ -155,8 +158,14 @@ const formatTime = (value?: string, attendanceDate?: string) => {
   return parsed && parsed.isValid() ? parsed.format("hh:mm A") : value;
 };
 
-const getDuration = (inTime?: string, outTime?: string, attendanceDate?: string) => {
-  const diffMinutes = getDurationMinutes(inTime, outTime, attendanceDate);
+const getDuration = (
+  inTime?: string,
+  outTime?: string,
+  attendanceDate?: string,
+  breakIn?: string,
+  breakOut?: string,
+) => {
+  const diffMinutes = getDurationMinutes(inTime, outTime, attendanceDate, breakIn, breakOut);
 
   if (diffMinutes === null) {
     return "-";
@@ -168,7 +177,13 @@ const getDuration = (inTime?: string, outTime?: string, attendanceDate?: string)
   return `${hours}h ${minutes}m`;
 };
 
-const getDurationMinutes = (inTime?: string, outTime?: string, attendanceDate?: string) => {
+const getDurationMinutes = (
+  inTime?: string,
+  outTime?: string,
+  attendanceDate?: string,
+  breakIn?: string,
+  breakOut?: string,
+) => {
   if (!inTime || !outTime) {
     return null;
   }
@@ -180,7 +195,29 @@ const getDurationMinutes = (inTime?: string, outTime?: string, attendanceDate?: 
     return null;
   }
 
-  return end.diff(start, "minute");
+  let totalMinutes = end.diff(start, "minute");
+
+  if (breakIn && breakOut) {
+    const breakStart = parseAttendanceDateTime(breakIn, attendanceDate);
+    const breakEnd = parseAttendanceDateTime(breakOut, attendanceDate);
+
+    if (
+      breakStart &&
+      breakEnd &&
+      breakStart.isValid() &&
+      breakEnd.isValid() &&
+      !breakEnd.isBefore(breakStart)
+    ) {
+      const boundedBreakStart = breakStart.isBefore(start) ? start : breakStart;
+      const boundedBreakEnd = breakEnd.isAfter(end) ? end : breakEnd;
+
+      if (!boundedBreakEnd.isBefore(boundedBreakStart)) {
+        totalMinutes -= boundedBreakEnd.diff(boundedBreakStart, "minute");
+      }
+    }
+  }
+
+  return Math.max(0, totalMinutes);
 };
 
 const getAttendanceRecordId = (record: AttendanceItem) =>
@@ -378,6 +415,30 @@ const AttendancePage: React.FC = () => {
     }
   };
 
+  const handleDeleteAttendance = async (record: AttendanceItem) => {
+    const recordId = record._id || record.id;
+
+    if (!recordId) {
+      message.error("Attendance record id is missing");
+      return;
+    }
+
+    try {
+      await deleteAdminAttendance(recordId);
+      message.success("Attendance deleted successfully");
+
+      if ((editingItem?._id || editingItem?.id) === recordId) {
+        closeModal();
+      }
+
+      await loadAttendance();
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to delete attendance",
+      );
+    }
+  };
+
   const openStatementModal = () => {
     statementForm.setFieldsValue({
       userId: selectedUserId || undefined,
@@ -428,7 +489,14 @@ const AttendancePage: React.FC = () => {
 
       const totalMinutes = statementRecords.reduce(
         (sum: number, record: AttendanceItem) =>
-          sum + (getDurationMinutes(record.inTime, record.outTime, record.date) || 0),
+          sum +
+            (getDurationMinutes(
+              record.inTime,
+              record.outTime,
+              record.date,
+              record.breakIn,
+              record.breakOut,
+            ) || 0),
         0,
       );
       const hourlySalary = Number(staffUser?.salary || 0);
@@ -446,7 +514,7 @@ const AttendancePage: React.FC = () => {
       const marginTop = 42;
       const contentWidth = pageWidth - marginX * 2;
       const rowHeight = 24;
-      const colWidths = [120, 110, 110, contentWidth - 340];
+      const colWidths = [92, 78, 78, 78, 78, contentWidth - 404];
       const monthLabel = monthStart.format("MMMM YYYY");
       const staffName = staffUser?.name || statementRecords[0]?.user?.name || "Staff User";
 
@@ -508,7 +576,7 @@ const AttendancePage: React.FC = () => {
 
       const drawTableHeader = (y: number) => {
         let cursorX = marginX;
-        ["Date", "In Time", "Out Time", "Total Hours"].forEach((label, index) => {
+        ["Date", "In Time", "Break In", "Break Out", "Out Time", "Total Hours"].forEach((label, index) => {
           drawCell(cursorX, y, colWidths[index], rowHeight, label, {
             align: "center",
             bold: true,
@@ -542,8 +610,16 @@ const AttendancePage: React.FC = () => {
           const rowValues = [
             formatDate(record.date),
             formatTime(record.inTime, record.date),
+            formatTime(record.breakIn, record.date),
+            formatTime(record.breakOut, record.date),
             formatTime(record.outTime, record.date),
-            getDuration(record.inTime, record.outTime, record.date),
+            getDuration(
+              record.inTime,
+              record.outTime,
+              record.date,
+              record.breakIn,
+              record.breakOut,
+            ),
           ];
 
           let cursorX = marginX;
@@ -567,13 +643,15 @@ const AttendancePage: React.FC = () => {
       }
 
       let totalRowX = marginX;
-      drawCell(totalRowX, cursorY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, "Total Hours", {
+      const summaryLabelWidth =
+        colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4];
+      drawCell(totalRowX, cursorY, summaryLabelWidth, rowHeight, "Total Hours", {
         align: "right",
         bold: true,
         fill: [240, 253, 250],
       });
-      totalRowX += colWidths[0] + colWidths[1] + colWidths[2];
-      drawCell(totalRowX, cursorY, colWidths[3], rowHeight, formatHoursFromMinutes(totalMinutes), {
+      totalRowX += summaryLabelWidth;
+      drawCell(totalRowX, cursorY, colWidths[5], rowHeight, formatHoursFromMinutes(totalMinutes), {
         align: "center",
         bold: true,
         fill: [240, 253, 250],
@@ -581,13 +659,13 @@ const AttendancePage: React.FC = () => {
 
       cursorY += rowHeight;
       totalRowX = marginX;
-      drawCell(totalRowX, cursorY, colWidths[0] + colWidths[1] + colWidths[2], rowHeight, "Total Salary", {
+      drawCell(totalRowX, cursorY, summaryLabelWidth, rowHeight, "Total Salary", {
         align: "right",
         bold: true,
         fill: [240, 253, 250],
       });
-      totalRowX += colWidths[0] + colWidths[1] + colWidths[2];
-      drawCell(totalRowX, cursorY, colWidths[3], rowHeight, formatPdfCurrency(totalSalary), {
+      totalRowX += summaryLabelWidth;
+      drawCell(totalRowX, cursorY, colWidths[5], rowHeight, formatPdfCurrency(totalSalary), {
         align: "center",
         bold: true,
         fill: [240, 253, 250],
@@ -675,7 +753,15 @@ const AttendancePage: React.FC = () => {
       key: "duration",
       width: 110,
       render: (_, record) => (
-        <Text>{getDuration(record.inTime, record.outTime, record.date)}</Text>
+        <Text>
+          {getDuration(
+            record.inTime,
+            record.outTime,
+            record.date,
+            record.breakIn,
+            record.breakOut,
+          )}
+        </Text>
       ),
     },
     {
@@ -696,23 +782,46 @@ const AttendancePage: React.FC = () => {
     {
       title: "Actions",
       key: "actions",
-      width: 96,
+      width: 150,
       fixed: "right",
       render: (_, record) => (
-        <Tooltip title="Edit attendance">
-          <Button
-            type="text"
-            aria-label="Edit attendance"
-            onClick={() => openEdit(record)}
-            icon={<EditOutlined />}
-            style={{
-              color: THEME.mid,
-              borderRadius: 10,
-              width: 36,
-              height: 36,
-            }}
-          />
-        </Tooltip>
+        <Space size="small">
+          <Tooltip title="Edit attendance">
+            <Button
+              type="text"
+              aria-label="Edit attendance"
+              onClick={() => openEdit(record)}
+              icon={<EditOutlined />}
+              style={{
+                color: THEME.mid,
+                borderRadius: 10,
+                width: 36,
+                height: 36,
+              }}
+            />
+          </Tooltip>
+          <Popconfirm
+            title="Delete attendance"
+            description="Are you sure you want to permanently delete this attendance record?"
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => void handleDeleteAttendance(record)}
+          >
+            <Tooltip title="Delete attendance">
+              <Button
+                type="text"
+                aria-label="Delete attendance"
+                danger
+                icon={<DeleteOutlined />}
+                style={{
+                  borderRadius: 10,
+                  width: 36,
+                  height: 36,
+                }}
+              />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];

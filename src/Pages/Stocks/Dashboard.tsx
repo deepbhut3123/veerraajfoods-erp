@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Empty, Progress, Select, Space, Spin, Tabs, Tag, Typography, message } from "antd";
+import { Card, Empty, Select, Space, Spin, Table, Tabs, Tag, Typography, message } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChartOutlined, InboxOutlined, RiseOutlined } from "@ant-design/icons";
+import { BarChartOutlined, HolderOutlined, InboxOutlined, RiseOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { getAllAdminStockEntries, getAllProducts } from "../../Utils/Api";
+import { getAllAdminStockEntries, getAllProducts, reorderProducts } from "../../Utils/Api";
+import "../Products/Index.css";
 
 const { Title, Text } = Typography;
 
@@ -18,6 +20,7 @@ const THEME = {
 type ProductOption = {
   _id?: string;
   id?: string;
+  sequence?: number;
   productName: string;
   mrp: number;
   productRate: number;
@@ -49,7 +52,8 @@ type TrendPoint = {
 
 type LiveStockRow = {
   key: string;
-  item: string;
+  sequence: number;
+  productName: string;
   available: number;
   rate: number;
   mrp: number;
@@ -92,6 +96,8 @@ const StocksDashboardPage: React.FC = () => {
   const [entries, setEntries] = useState<StockEntryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(dayjs().format("YYYY-MM"));
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const [orderedKeys, setOrderedKeys] = useState<string[]>([]);
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -187,7 +193,8 @@ const StocksDashboardPage: React.FC = () => {
     const stockMap = new Map<
       string,
       {
-        item: string;
+        sequence: number;
+        productName: string;
         available: number;
         rate: number;
         mrp: number;
@@ -203,7 +210,8 @@ const StocksDashboardPage: React.FC = () => {
       }
 
       stockMap.set(key, {
-        item: product.productName,
+        sequence: Number(product.sequence || 0),
+        productName: product.productName,
         available: Math.max(0, Number(product.currentStock || 0)),
         rate: Number(product.productRate || 0),
         mrp: Number(product.mrp || 0),
@@ -220,7 +228,8 @@ const StocksDashboardPage: React.FC = () => {
         }
 
         const current = stockMap.get(key) || {
-          item: item.productName || "Unknown Product",
+          sequence: 0,
+          productName: item.productName || "Unknown Product",
           available: 0,
           rate: Number(item.productRate || 0),
           mrp: Number(item.mrp || 0),
@@ -228,7 +237,8 @@ const StocksDashboardPage: React.FC = () => {
           lastEntryDate: "",
         };
 
-        current.item = current.item || item.productName || "Unknown Product";
+        current.productName = current.productName || item.productName || "Unknown Product";
+        current.sequence = Number(current.sequence || 0);
         current.rate = Number(item.productRate || current.rate || 0);
         current.mrp = Number(item.mrp || current.mrp || 0);
 
@@ -254,7 +264,8 @@ const StocksDashboardPage: React.FC = () => {
 
         return {
           key,
-          item: value.item,
+          sequence: Number(value.sequence || 0),
+          productName: value.productName,
           available,
           rate: value.rate,
           mrp: value.mrp,
@@ -264,27 +275,16 @@ const StocksDashboardPage: React.FC = () => {
           status,
         };
       })
-      .sort((left, right) => right.available - left.available || left.item.localeCompare(right.item));
+      .sort(
+        (left, right) =>
+          (left.sequence || Number.MAX_SAFE_INTEGER) - (right.sequence || Number.MAX_SAFE_INTEGER) ||
+          left.productName.localeCompare(right.productName),
+      );
   }, [entries, products]);
-
-  const monthQuantity = useMemo(
-    () =>
-      filteredEntries.reduce(
-        (sum, entry) =>
-          sum + (entry.items || []).reduce((itemSum, item) => itemSum + Number(item.quantity || 0), 0),
-        0,
-      ),
-    [filteredEntries],
-  );
 
   const monthValue = useMemo(
     () => filteredEntries.reduce((sum, entry) => sum + Number(entry.totalAmount || 0), 0),
     [filteredEntries],
-  );
-
-  const totalAvailable = useMemo(
-    () => liveStockRows.reduce((sum, row) => sum + Number(row.available || 0), 0),
-    [liveStockRows],
   );
 
   const totalStockValue = useMemo(
@@ -297,36 +297,124 @@ const StocksDashboardPage: React.FC = () => {
     [liveStockRows],
   );
 
-  const topStockItem = liveStockRows[0];
+  useEffect(() => {
+    setOrderedKeys((previous) => {
+      const sequenceOrder = liveStockRows.map((row) => row.key);
+      if (
+        sequenceOrder.length === previous.length &&
+        sequenceOrder.every((key, index) => key === previous[index])
+      ) {
+        return previous;
+      }
 
-  const metricCards = [
+      return sequenceOrder;
+    });
+  }, [liveStockRows]);
+
+  const orderedLiveStockRows = useMemo(() => {
+    if (!orderedKeys.length) {
+      return liveStockRows;
+    }
+
+    const positionMap = new Map(orderedKeys.map((key, index) => [key, index]));
+
+    return [...liveStockRows].sort((left, right) => {
+      const leftIndex = positionMap.get(left.key);
+      const rightIndex = positionMap.get(right.key);
+
+      if (leftIndex === undefined && rightIndex === undefined) {
+        return 0;
+      }
+
+      if (leftIndex === undefined) {
+        return 1;
+      }
+
+      if (rightIndex === undefined) {
+        return -1;
+      }
+
+      return leftIndex - rightIndex;
+    });
+  }, [liveStockRows, orderedKeys]);
+
+  const handleReorder = async (draggedKey: string, targetKey: string) => {
+    if (!draggedKey || !targetKey || draggedKey === targetKey) {
+      return;
+    }
+
+    const previousOrder = orderedKeys.length ? [...orderedKeys] : liveStockRows.map((row) => row.key);
+    const draggedIndex = previousOrder.indexOf(draggedKey);
+    const targetIndex = previousOrder.indexOf(targetKey);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      return;
+    }
+
+    const nextOrder = [...previousOrder];
+    const [draggedItem] = nextOrder.splice(draggedIndex, 1);
+    nextOrder.splice(targetIndex, 0, draggedItem);
+    setOrderedKeys(nextOrder);
+
+    try {
+      const response = await reorderProducts(nextOrder);
+      setProducts(Array.isArray(response?.data) ? response.data : []);
+      message.success("Product sequence updated");
+    } catch (err: any) {
+      setOrderedKeys(previousOrder);
+      message.error(
+        err?.response?.data?.message || err?.message || "Failed to update product sequence",
+      );
+    }
+  };
+
+  const topStockItem = orderedLiveStockRows[0];
+
+  const productColumns: ColumnsType<LiveStockRow> = [
     {
+      title: "",
+      key: "drag",
+      width: 56,
+      align: "center",
+      render: () => (
+        <span className="product-drag-handle" aria-label="Drag to reorder stock product">
+          <HolderOutlined />
+        </span>
+      ),
+    },
+    {
+      title: "MRP",
+      dataIndex: "mrp",
+      key: "mrp",
+      width: 120,
+      render: (value) => <Text strong>{formatPlainNumber(value)}</Text>,
+    },
+    {
+      title: "Product Name",
+      dataIndex: "productName",
+      key: "productName",
+      render: (value) => <Text strong style={{ color: THEME.dark }}>{value || "-"}</Text>,
+    },
+    {
+      title: "Live Stock",
+      dataIndex: "available",
       key: "available",
-      label: "Current Total Stock",
-      value: formatNumber(totalAvailable),
-      hint: "Combined quantity across every product currently tracked",
-      accent: "linear-gradient(135deg, #0f766e 0%, #2dd4bf 100%)",
+      width: 140,
+      render: (value) => <Text strong style={{ color: THEME.mid }}>{formatNumber(value)}</Text>,
     },
     {
-      key: "month-qty",
-      label: "This Month Quantity",
-      value: formatNumber(monthQuantity),
-      hint: "Total quantity entered in the selected month",
-      accent: "linear-gradient(135deg, #2563eb 0%, #38bdf8 100%)",
+      title: "Stock Value",
+      dataIndex: "stockValue",
+      key: "stockValue",
+      width: 180,
+      render: (value) => <Text strong>{formatCurrency(value)}</Text>,
     },
     {
-      key: "month-value",
-      label: "Live Stock Value",
-      value: formatCurrency(totalStockValue),
-      hint: "Current live stock value across all products",
-      accent: "linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%)",
-    },
-    {
-      key: "low",
-      label: "Low / Empty Products",
-      value: `${lowStockCount}`,
-      hint: "Products needing fresh entry attention soon",
-      accent: "linear-gradient(135deg, #b45309 0%, #f59e0b 100%)",
+      title: "Rate",
+      dataIndex: "rate",
+      key: "rate",
+      width: 140,
+      render: (value) => <Text strong>{formatCurrency(value)}</Text>,
     },
   ];
 
@@ -388,55 +476,34 @@ const StocksDashboardPage: React.FC = () => {
             </Text>
           </div>
 
-          <Select
-            size="large"
-            value={selectedMonth}
-            onChange={setSelectedMonth}
-            options={monthOptions}
-            style={{ width: 180 }}
-          />
-        </div>
-      </Card>
-
-      <div
-        style={{
-          marginBottom: 20,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: 16,
-        }}
-      >
-        {metricCards.map((card) => (
-          <div
-            key={card.key}
-            style={{
-              position: "relative",
-              overflow: "hidden",
-              borderRadius: 20,
-              padding: 20,
-              color: "#fff",
-              background: card.accent,
-              boxShadow: "0 18px 30px rgba(15, 23, 42, 0.12)",
-            }}
-          >
+          <Space size={12} wrap>
             <div
               style={{
-                position: "absolute",
-                inset: "auto -10% -45% auto",
-                width: 120,
-                height: 120,
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.14)",
+                padding: "10px 16px",
+                borderRadius: 16,
+                border: "1px solid rgba(0, 105, 92, 0.12)",
+                background: "rgba(224, 247, 246, 0.86)",
+                minWidth: 180,
               }}
+            >
+              <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                Live Stock Value
+              </Text>
+              <Text strong style={{ color: THEME.mid, fontSize: 18 }}>
+                {formatCurrency(totalStockValue)}
+              </Text>
+            </div>
+
+            <Select
+              size="large"
+              value={selectedMonth}
+              onChange={setSelectedMonth}
+              options={monthOptions}
+              style={{ width: 180 }}
             />
-            <Text style={{ color: "rgba(255,255,255,0.86)", fontSize: 13 }}>{card.label}</Text>
-            <Title level={2} style={{ color: "#fff", margin: "10px 0 4px" }}>
-              {card.value}
-            </Title>
-            <Text style={{ color: "rgba(255,255,255,0.8)" }}>{card.hint}</Text>
-          </div>
-        ))}
-      </div>
+          </Space>
+        </div>
+      </Card>
 
       <Card
         bordered={false}
@@ -478,161 +545,42 @@ const StocksDashboardPage: React.FC = () => {
                         fontWeight: 700,
                       }}
                     >
-                      {`${liveStockRows.length} Products`}
+                      {`${orderedLiveStockRows.length} Products`}
                     </Tag>
                   </Space>
 
-                  {liveStockRows.length ? (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-                        gap: 16,
-                      }}
-                    >
-                      {liveStockRows.map((record) => {
-                        const isLow = record.status !== "active";
-                        const label =
-                          record.status === "idle" ? "No Stock" : record.status === "low" ? "Low Stock" : "Healthy";
-
-                        return (
-                          <div
-                            key={record.key}
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              borderRadius: 20,
-                              padding: 18,
-                              border: "1px solid rgba(148, 163, 184, 0.16)",
-                              background:
-                                "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.96) 100%)",
-                              boxShadow: "0 12px 30px rgba(15, 23, 42, 0.06)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                gap: 12,
-                                alignItems: "flex-start",
-                                minHeight: 52,
-                                marginBottom: 12,
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 8,
-                                  flex: 1,
-                                  minWidth: 0,
-                                  paddingRight: 8,
-                                }}
-                              >
-                                <Text strong style={{ fontSize: 16, color: THEME.dark, margin: 0 }}>
-                                  {formatPlainNumber(record.mrp)}
-                                </Text>
-                                <Text
-                                  type="secondary"
-                                  style={{
-                                    margin: 0,
-                                    flex: 1,
-                                    minWidth: 0,
-                                    lineHeight: 1.35,
-                                    display: "-webkit-box",
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: "vertical",
-                                    overflow: "hidden",
-                                    wordBreak: "break-word",
-                                  }}
-                                >
-                                  {record.item}
-                                </Text>
-                              </div>
-
-                              <Tag
-                                style={{
-                                  margin: 0,
-                                  flexShrink: 0,
-                                  border: "none",
-                                  borderRadius: 999,
-                                  padding: "4px 10px",
-                                  fontWeight: 700,
-                                  background: isLow ? "rgba(220, 38, 38, 0.12)" : "rgba(0, 105, 92, 0.1)",
-                                  color: isLow ? THEME.red : THEME.mid,
-                                }}
-                              >
-                                {label}
-                              </Tag>
-                            </div>
-
-                            <div
-                              style={{
-                                marginBottom: 14,
-                                padding: "16px 18px",
-                                borderRadius: 18,
-                                background: "linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)",
-                                color: "#fff",
-                              }}
-                            >
-                              <Text style={{ color: "rgba(255,255,255,0.84)" }}>Available Stock</Text>
-                              <Title level={1} style={{ color: "#fff", margin: "4px 0 0", fontSize: 36 }}>
-                                {formatNumber(record.available)}
-                              </Title>
-                            </div>
-
-                            <div style={{ display: "grid", gap: 10 }}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  gap: 12,
-                                  alignItems: "center",
-                                }}
-                              >
-                                <Text type="secondary">Stock Value</Text>
-                                <Text strong style={{ color: THEME.mid }}>
-                                  {formatCurrency(record.stockValue)}
-                                </Text>
-                              </div>
-
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  gap: 12,
-                                  alignItems: "center",
-                                }}
-                              >
-                                <Text type="secondary">Rate</Text>
-                                <Text strong>{formatCurrency(record.rate)}</Text>
-                              </div>
-
-                              <div
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  gap: 12,
-                                  alignItems: "center",
-                                }}
-                              >
-                                <Text type="secondary">Last Entry</Text>
-                                <Text strong>{formatDate(record.lastEntryDate)}</Text>
-                              </div>
-                            </div>
-
-                            <div style={{ marginTop: 14 }}>
-                              <Progress
-                                percent={record.fillPercent}
-                                showInfo={false}
-                                strokeColor={isLow ? THEME.red : THEME.mid}
-                                trailColor="rgba(148, 163, 184, 0.18)"
-                              />
-                            </div>
-                          </div>
-                        );
+                  {orderedLiveStockRows.length ? (
+                    <Table
+                      rowKey="key"
+                      dataSource={orderedLiveStockRows}
+                      columns={productColumns}
+                      pagination={false}
+                      scroll={{ x: 760 }}
+                      rowClassName={(record) =>
+                        record.key === draggingKey ? "product-row product-row-dragging" : "product-row"
+                      }
+                      onRow={(record) => ({
+                        draggable: true,
+                        onDragStart: (event) => {
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", record.key);
+                          setDraggingKey(record.key);
+                        },
+                        onDragOver: (event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                        },
+                        onDrop: (event) => {
+                          event.preventDefault();
+                          const draggedProductKey = event.dataTransfer.getData("text/plain");
+                          setDraggingKey(null);
+                          handleReorder(draggedProductKey, record.key);
+                        },
+                        onDragEnd: () => {
+                          setDraggingKey(null);
+                        },
                       })}
-                    </div>
+                    />
                   ) : (
                     <Empty description="No live stock data available yet" />
                   )}
@@ -791,7 +739,7 @@ const StocksDashboardPage: React.FC = () => {
                     >
                       <Text style={{ color: "rgba(255,255,255,0.8)" }}>Top Live Product</Text>
                       <Title level={2} style={{ color: "#fff", margin: "8px 0 4px" }}>
-                        {topStockItem?.item || "No Product"}
+                        {topStockItem?.productName || "No Product"}
                       </Title>
                       <Text style={{ color: "rgba(255,255,255,0.74)" }}>
                         {topStockItem
