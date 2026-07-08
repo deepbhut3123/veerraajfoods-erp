@@ -32,6 +32,7 @@ import {
   getAllDealerBills,
   getAllDealers,
   getAllDealerProducts,
+  getAllProducts,
   updateDealerBill,
 } from "../../Utils/Api";
 
@@ -58,8 +59,17 @@ type DealerProductOption = {
   sequence?: number;
 };
 
+type StockProductOption = {
+  _id: string;
+  mrp: number;
+  productName: string;
+  productRate: number;
+  currentStock?: number;
+};
+
 type DealerBillLineItem = {
   productId?: string | DealerProductOption | null;
+  stockProductId?: string | StockProductOption | null;
   mrp?: number;
   productName?: string;
   productRate?: number;
@@ -219,10 +229,59 @@ const resolveCustomAmount = (amount?: number, productRate?: number) => {
   return Number.isFinite(normalizedRate) && normalizedRate >= 0 ? normalizedRate : 0;
 };
 
+const normalizeProductName = (value?: string) =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+const resolveStockProduct = (
+  productName: string | undefined,
+  mrp: number | undefined,
+  stockProducts: StockProductOption[],
+) => {
+  const normalizedName = normalizeProductName(productName);
+  const candidates = stockProducts.filter(
+    (product) => normalizeProductName(product.productName) === normalizedName,
+  );
+
+  if (!candidates.length) {
+    return {
+      product: null,
+      reason: "missing" as const,
+    };
+  }
+
+  if (candidates.length === 1) {
+    return {
+      product: candidates[0],
+      reason: null,
+    };
+  }
+
+  const normalizedMrp = Number(mrp || 0);
+  const exactMrpMatches = candidates.filter(
+    (candidate) => Number(candidate.mrp || 0) === normalizedMrp,
+  );
+
+  if (exactMrpMatches.length === 1) {
+    return {
+      product: exactMrpMatches[0],
+      reason: null,
+    };
+  }
+
+  return {
+    product: null,
+    reason: "ambiguous" as const,
+  };
+};
+
 const DealerBillsPage: React.FC = () => {
   const [data, setData] = useState<DealerBillRecord[]>([]);
   const [dealers, setDealers] = useState<DealerOption[]>([]);
   const [products, setProducts] = useState<DealerProductOption[]>([]);
+  const [stockProducts, setStockProducts] = useState<StockProductOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchText, setSearchText] = useState("");
@@ -265,12 +324,14 @@ const DealerBillsPage: React.FC = () => {
   useEffect(() => {
     const loadStaticData = async () => {
       try {
-        const [dealerRes, productRes] = await Promise.all([
+        const [dealerRes, productRes, stockProductRes] = await Promise.all([
           getAllDealers(),
           getAllDealerProducts(),
+          getAllProducts(),
         ]);
         setDealers(dealerRes?.data || []);
         setProducts(sortDealerProductsBySequence(productRes?.data || []));
+        setStockProducts(stockProductRes?.data || []);
       } catch (err: any) {
         setError(
           err?.response?.data?.message ||
@@ -295,6 +356,108 @@ const DealerBillsPage: React.FC = () => {
     () => dealers.find((dealer) => dealer._id === selectedDealerId),
     [dealers, selectedDealerId],
   );
+
+  const editingStockRestoreMap = useMemo(() => {
+    const quantityMap = new Map<string, number>();
+
+    (editingItem?.items || []).forEach((item) => {
+      const directStockProductId =
+        typeof item.stockProductId === "object"
+          ? item.stockProductId?._id
+          : item.stockProductId;
+      const stockResolution = directStockProductId
+        ? {
+            product: stockProducts.find((stockProduct) => stockProduct._id === directStockProductId) || null,
+          }
+        : resolveStockProduct(item.productName, item.mrp, stockProducts);
+      const stockProductId = stockResolution.product?._id;
+      const quantity = Number(item.quantity || 0);
+
+      if (!stockProductId || !Number.isFinite(quantity) || quantity <= 0) {
+        return;
+      }
+
+      quantityMap.set(
+        stockProductId,
+        Number(quantityMap.get(stockProductId) || 0) + quantity,
+      );
+    });
+
+    return quantityMap;
+  }, [editingItem?.items, stockProducts]);
+
+  const dealerBillStockWarnings = useMemo(() => {
+    const requestedQuantityMap = new Map<string, number>();
+    const warnings: string[] = [];
+    const processedProducts = new Set<string>();
+
+    orderedProducts.forEach((product, index) => {
+      const quantity = Number(watchedItems?.[index]?.quantity || 0);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return;
+      }
+
+      const stockResolution = resolveStockProduct(product.productName, product.mrp, stockProducts);
+      if (!stockResolution.product) {
+        warnings.push(
+          stockResolution.reason === "ambiguous"
+            ? `Multiple stock products matched "${product.productName}". Please align stock product name or MRP first.`
+            : `Stock product not found for "${product.productName}". Please update stocks of this product first.`,
+        );
+        return;
+      }
+
+      const stockProductId = stockResolution.product._id;
+      requestedQuantityMap.set(
+        stockProductId,
+        Number(requestedQuantityMap.get(stockProductId) || 0) + quantity,
+      );
+    });
+
+    watchedCustomItems.forEach((item) => {
+      const productName = String(item?.productName || "").trim();
+      const quantity = Number(item?.quantity || 0);
+
+      if (!productName || !Number.isFinite(quantity) || quantity <= 0) {
+        return;
+      }
+
+      const stockResolution = resolveStockProduct(productName, item?.mrp, stockProducts);
+      if (!stockResolution.product) {
+        warnings.push(
+          stockResolution.reason === "ambiguous"
+            ? `Multiple stock products matched "${productName}". Please align stock product name or MRP first.`
+            : `Stock product not found for "${productName}". Please update stocks of this product first.`,
+        );
+        return;
+      }
+
+      const stockProductId = stockResolution.product._id;
+      requestedQuantityMap.set(
+        stockProductId,
+        Number(requestedQuantityMap.get(stockProductId) || 0) + quantity,
+      );
+    });
+
+    requestedQuantityMap.forEach((requestedQuantity, stockProductId) => {
+      const stockProduct = stockProducts.find((product) => product._id === stockProductId);
+      if (!stockProduct) {
+        return;
+      }
+
+      const restoredQuantity = Number(editingStockRestoreMap.get(stockProductId) || 0);
+      const availableQuantity = Number(stockProduct.currentStock || 0) + restoredQuantity;
+
+      if (requestedQuantity > availableQuantity && !processedProducts.has(stockProductId)) {
+        warnings.push(
+          `${stockProduct.productName} has only ${availableQuantity} in stock, but ${requestedQuantity} is requested. Please update stocks of this product.`,
+        );
+        processedProducts.add(stockProductId);
+      }
+    });
+
+    return Array.from(new Set(warnings));
+  }, [editingStockRestoreMap, orderedProducts, stockProducts, watchedCustomItems, watchedItems]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -511,6 +674,12 @@ const DealerBillsPage: React.FC = () => {
     setSaving(true);
 
     try {
+      if (dealerBillStockWarnings.length) {
+        message.warning(dealerBillStockWarnings[0]);
+        setSaving(false);
+        return;
+      }
+
       const kattaCount = Number(values.kattaCount);
 
       if (!Number.isFinite(kattaCount) || kattaCount <= 0) {
@@ -942,6 +1111,25 @@ const DealerBillsPage: React.FC = () => {
             </Form.Item>
           </div>
 
+          {dealerBillStockWarnings.length ? (
+            <Alert
+              showIcon
+              type="warning"
+              message="Stock warning"
+              description={
+                <div style={{ display: "grid", gap: 6 }}>
+                  {dealerBillStockWarnings.map((warning) => (
+                    <div key={warning}>{warning}</div>
+                  ))}
+                </div>
+              }
+              style={{
+                marginTop: 18,
+                borderRadius: 14,
+              }}
+            />
+          ) : null}
+
           <div style={{ marginTop: 20 }}>
             <Text strong>Saved Products</Text>
           </div>
@@ -1010,8 +1198,33 @@ const DealerBillsPage: React.FC = () => {
                     <div style={{ fontSize: 16, color: "#111827" }}>
                       {formatCurrency(product.mrp)}
                     </div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>
-                      {product.productName}
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>
+                        {product.productName}
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 12, color: "#6b7280" }}>
+                        {(() => {
+                          const stockResolution = resolveStockProduct(
+                            product.productName,
+                            product.mrp,
+                            stockProducts,
+                          );
+
+                          if (!stockResolution.product) {
+                            return stockResolution.reason === "ambiguous"
+                              ? "Multiple stock products matched this dealer product"
+                              : "Stock product not found";
+                          }
+
+                          const restoredQuantity = Number(
+                            editingStockRestoreMap.get(stockResolution.product._id) || 0,
+                          );
+                          const availableQuantity =
+                            Number(stockResolution.product.currentStock || 0) + restoredQuantity;
+
+                          return `Available stock: ${availableQuantity}`;
+                        })()}
+                      </div>
                     </div>
                     <Form.Item
                       name={["items", index, "quantity"]}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -21,8 +21,17 @@ import {
   DeleteOutlined,
   EditOutlined,
   EnvironmentOutlined,
+  AimOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
+import {
+  CircleMarker,
+  MapContainer,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
+import type { LatLngExpression } from "leaflet";
 import {
   addAdminShop,
   deleteAdminShop,
@@ -30,6 +39,7 @@ import {
   getAllAdminShops,
   updateAdminShop,
 } from "../../Utils/Api";
+import "leaflet/dist/leaflet.css";
 
 const { Title, Text } = Typography;
 const THEME = {
@@ -73,6 +83,62 @@ type ShopFormValues = {
   longitude?: number;
 };
 
+const DEFAULT_MAP_CENTER: [number, number] = [23.0225, 72.5714];
+
+const ShopLocationPicker: React.FC<{
+  position: [number, number];
+  onSelect: (nextPosition: [number, number]) => void;
+}> = ({ position, onSelect }) => {
+  useMapEvents({
+    click: (event) => {
+      onSelect([event.latlng.lat, event.latlng.lng]);
+    },
+  });
+
+  return (
+    <CircleMarker
+      center={position}
+      radius={10}
+      pathOptions={{
+        color: "#00695C",
+        fillColor: "#14b8a6",
+        fillOpacity: 0.78,
+        weight: 3,
+      }}
+    />
+  );
+};
+
+const ShopMapViewport: React.FC<{
+  isOpen: boolean;
+  position: [number, number];
+}> = ({ isOpen, position }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      map.invalidateSize();
+      map.setView(position, map.getZoom(), { animate: false });
+    }, 200);
+
+    return () => window.clearTimeout(timer);
+  }, [isOpen, map, position]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    map.setView(position, map.getZoom(), { animate: false });
+  }, [isOpen, map, position]);
+
+  return null;
+};
+
 const getCoordinateValue = (value?: number | string) => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -104,8 +170,10 @@ const ShopsPage: React.FC = () => {
   const [error, setError] = useState("");
   const [searchText, setSearchText] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [mapModalOpen, setMapModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<AdminShop | null>(null);
+  const [selectedMapPosition, setSelectedMapPosition] = useState<[number, number]>(DEFAULT_MAP_CENTER);
   const [form] = Form.useForm<ShopFormValues>();
 
   const loadShops = async (search = "") => {
@@ -163,9 +231,61 @@ const ShopsPage: React.FC = () => {
 
   const closeModal = () => {
     setModalOpen(false);
+    setMapModalOpen(false);
     setEditingItem(null);
     form.resetFields();
   };
+
+  const openMapModal = () => {
+    const currentLatitude = form.getFieldValue("latitude");
+    const currentLongitude = form.getFieldValue("longitude");
+    const lat = typeof currentLatitude === "number" ? currentLatitude : Number(currentLatitude);
+    const lng = typeof currentLongitude === "number" ? currentLongitude : Number(currentLongitude);
+
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      setSelectedMapPosition([lat, lng]);
+    } else {
+      setSelectedMapPosition(DEFAULT_MAP_CENTER);
+    }
+
+    setMapModalOpen(true);
+  };
+
+  const applySelectedLocation = () => {
+    form.setFieldsValue({
+      latitude: Number(selectedMapPosition[0].toFixed(6)),
+      longitude: Number(selectedMapPosition[1].toFixed(6)),
+    });
+    setMapModalOpen(false);
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      message.error("Geolocation is not supported in this browser");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setSelectedMapPosition([
+          Number(position.coords.latitude),
+          Number(position.coords.longitude),
+        ]);
+      },
+      () => {
+        message.error("Failed to fetch current location");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+      },
+    );
+  };
+
+  const selectedMapCenter = useMemo<LatLngExpression>(
+    () => [selectedMapPosition[0], selectedMapPosition[1]],
+    [selectedMapPosition],
+  );
 
   const handleSubmit = async (values: ShopFormValues) => {
     setSaving(true);
@@ -543,12 +663,141 @@ const ShopsPage: React.FC = () => {
             </Form.Item>
           </div>
 
+          <div
+            style={{
+              marginTop: 16,
+              padding: 14,
+              borderRadius: 14,
+              border: "1px solid rgba(0, 105, 92, 0.12)",
+              background: "linear-gradient(180deg, rgba(240,253,250,0.92) 0%, rgba(255,255,255,1) 100%)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <Text strong style={{ color: THEME.dark, display: "block" }}>
+                Location Picker
+              </Text>
+              <Text type="secondary">
+                Select location from map if latitude and longitude are not known.
+              </Text>
+            </div>
+            <Button
+              icon={<EnvironmentOutlined />}
+              onClick={openMapModal}
+              style={{
+                height: 42,
+                paddingInline: 18,
+                borderRadius: 12,
+                borderColor: "rgba(0, 105, 92, 0.2)",
+                color: THEME.mid,
+                fontWeight: 600,
+              }}
+            >
+              Pick On Map
+            </Button>
+          </div>
+
           <div style={{ marginTop: 12 }}>
             <Text type="secondary">
               Leave latitude and longitude empty if you do not want to save location.
             </Text>
           </div>
         </Form>
+      </Modal>
+
+      <Modal
+        title="Select Shop Location"
+        open={mapModalOpen}
+        onCancel={() => setMapModalOpen(false)}
+        onOk={applySelectedLocation}
+        okText="Use This Location"
+        width={860}
+        centered
+        destroyOnClose
+        okButtonProps={{
+          style: {
+            background: "linear-gradient(135deg, #00695C 0%, #0f766e 100%)",
+            borderColor: "#00695C",
+            borderRadius: 10,
+          },
+        }}
+        cancelButtonProps={{ style: { borderRadius: 10 } }}
+      >
+        <Space direction="vertical" size={14} style={{ width: "100%" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <Space size={16} wrap>
+              <div>
+                <Text type="secondary" style={{ display: "block" }}>
+                  Latitude
+                </Text>
+                <Text strong>{selectedMapPosition[0].toFixed(6)}</Text>
+              </div>
+              <div>
+                <Text type="secondary" style={{ display: "block" }}>
+                  Longitude
+                </Text>
+                <Text strong>{selectedMapPosition[1].toFixed(6)}</Text>
+              </div>
+            </Space>
+
+            <Button
+              icon={<AimOutlined />}
+              onClick={useCurrentLocation}
+              style={{
+                borderRadius: 10,
+                borderColor: "rgba(0, 105, 92, 0.2)",
+                color: THEME.mid,
+                fontWeight: 600,
+              }}
+            >
+              Use Current Location
+            </Button>
+          </div>
+
+          <div
+            style={{
+              borderRadius: 16,
+              overflow: "hidden",
+              border: "1px solid rgba(0, 105, 92, 0.12)",
+            }}
+          >
+            <MapContainer
+              center={selectedMapCenter}
+              zoom={15}
+              style={{ height: 420, width: "100%" }}
+              scrollWheelZoom
+            >
+              <ShopMapViewport
+                isOpen={mapModalOpen}
+                position={selectedMapPosition}
+              />
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <ShopLocationPicker
+                position={selectedMapPosition}
+                onSelect={setSelectedMapPosition}
+              />
+            </MapContainer>
+          </div>
+
+          <Text type="secondary">
+            Click anywhere on the map to set the shop location, then confirm to fill latitude and longitude.
+          </Text>
+        </Space>
       </Modal>
     </div>
   );
