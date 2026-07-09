@@ -38,7 +38,9 @@ const THEME = {
 type AdminRoute = {
   _id: string;
   routeName: string;
+  routeNameGujarati?: string;
   cityName: string;
+  cityNameGujarati?: string;
   createdAt?: string;
   userId?: {
     name?: string;
@@ -50,6 +52,7 @@ type AdminRoute = {
 type AdminShop = {
   _id: string;
   shopName: string;
+  shopNameGujarati?: string;
   shopAddress?: string;
   mobileNumber?: string;
   latitude?: number | string;
@@ -67,6 +70,7 @@ type AdminShop = {
   routeId?: {
     _id?: string;
     routeName?: string;
+    routeNameGujarati?: string;
     cityName?: string;
   };
 };
@@ -78,8 +82,21 @@ type ShopCoordinate = {
 
 type RouteFormValues = {
   routeName: string;
+  routeNameGujarati?: string;
   cityName: string;
+  cityNameGujarati?: string;
 };
+
+const getRouteLabel = (
+  route: Pick<AdminRoute, "routeName" | "routeNameGujarati" | "cityName" | "cityNameGujarati">,
+) => {
+  const routeName = [route.routeName, route.routeNameGujarati].filter(Boolean).join(" / ");
+  const cityName = [route.cityName, route.cityNameGujarati].filter(Boolean).join(" / ");
+  return cityName ? `${routeName} - ${cityName}` : routeName;
+};
+
+const getShopLabel = (shop: Pick<AdminShop, "shopName" | "shopNameGujarati">) =>
+  [shop.shopName, shop.shopNameGujarati].filter(Boolean).join(" / ");
 
 const getCoordinateValue = (value?: number | string) => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -208,7 +225,9 @@ const RoutesPage: React.FC = () => {
     setEditingItem(item);
     form.setFieldsValue({
       routeName: item.routeName,
+      routeNameGujarati: item.routeNameGujarati,
       cityName: item.cityName,
+      cityNameGujarati: item.cityNameGujarati,
     });
     setModalOpen(true);
   };
@@ -221,12 +240,22 @@ const RoutesPage: React.FC = () => {
 
   const handleSubmit = async (values: RouteFormValues) => {
     setSaving(true);
+    const payload = {
+      routeName: values.routeName,
+      cityName: values.cityName,
+      ...(values.routeNameGujarati?.trim()
+        ? { routeNameGujarati: values.routeNameGujarati.trim() }
+        : {}),
+      ...(values.cityNameGujarati?.trim()
+        ? { cityNameGujarati: values.cityNameGujarati.trim() }
+        : {}),
+    };
     try {
       if (editingItem) {
-        await updateAdminRoute(editingItem._id, values);
+        await updateAdminRoute(editingItem._id, payload);
         message.success("Route updated successfully");
       } else {
-        await addAdminRoute(values);
+        await addAdminRoute(payload);
         message.success("Route created successfully");
       }
 
@@ -281,7 +310,7 @@ const RoutesPage: React.FC = () => {
           }
 
           return {
-            name: shop.shopName || "Shop",
+            name: getShopLabel(shop) || "Shop",
             address: shop.shopAddress || "-",
             latitude: coordinates.latitude,
             longitude: coordinates.longitude,
@@ -317,7 +346,9 @@ const RoutesPage: React.FC = () => {
 
       return [
         record.routeName,
+        record.routeNameGujarati,
         record.cityName,
+        record.cityNameGujarati,
         record.userId?.name,
         record.userId?.email,
         String(shopCount),
@@ -355,11 +386,23 @@ const RoutesPage: React.FC = () => {
       title: "Route Name",
       dataIndex: "routeName",
       key: "routeName",
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.routeName}</Text>
+          {record.routeNameGujarati ? <Text type="secondary">{record.routeNameGujarati}</Text> : null}
+        </Space>
+      ),
     },
     {
       title: "City",
       dataIndex: "cityName",
       key: "cityName",
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text>{record.cityName}</Text>
+          {record.cityNameGujarati ? <Text type="secondary">{record.cityNameGujarati}</Text> : null}
+        </Space>
+      ),
     },
     {
       title: "Created By",
@@ -550,7 +593,7 @@ const RoutesPage: React.FC = () => {
         width={920}
         title={
           activeRoute
-            ? `${activeRoute.routeName}${activeRoute.cityName ? ` - ${activeRoute.cityName}` : ""} Shops`
+            ? `${getRouteLabel(activeRoute)} Shops`
             : "Route Shops"
         }
       >
@@ -610,6 +653,7 @@ const RoutesPage: React.FC = () => {
                 >
                   <Space direction="vertical" size={4}>
                     <Text strong>{shop.shopName}</Text>
+                    {shop.shopNameGujarati ? <Text type="secondary">{shop.shopNameGujarati}</Text> : null}
                     <Text>{shop.shopAddress || "-"}</Text>
                     <Text type="secondary">Mobile: {shop.mobileNumber || "-"}</Text>
                     <Text type="secondary">
@@ -667,7 +711,7 @@ const RoutesPage: React.FC = () => {
         }}
         destroyOnClose
         centered
-        width={640}
+        width={860}
         styles={{
           header: {
             borderBottom: "1px solid rgba(0, 105, 92, 0.12)",
@@ -690,7 +734,7 @@ const RoutesPage: React.FC = () => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
               gap: 16,
             }}
           >
@@ -708,6 +752,18 @@ const RoutesPage: React.FC = () => {
             </Form.Item>
 
             <Form.Item
+              label="Route Name (Gujarati)"
+              name="routeNameGujarati"
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                size="large"
+                placeholder="ગુજરાતી રૂટ નામ લખો"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+
+            <Form.Item
               label="City Name"
               name="cityName"
               rules={[{ required: true, message: "Please enter city name" }]}
@@ -716,6 +772,18 @@ const RoutesPage: React.FC = () => {
               <Input
                 size="large"
                 placeholder="Enter city name"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="City Name (Gujarati)"
+              name="cityNameGujarati"
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                size="large"
+                placeholder="ગુજરાતી શહેર નામ લખો"
                 style={{ borderRadius: 12 }}
               />
             </Form.Item>

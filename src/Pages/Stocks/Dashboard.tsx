@@ -22,13 +22,14 @@ type ProductOption = {
   id?: string;
   sequence?: number;
   productName: string;
+  productNameGujarati?: string;
   mrp: number;
   productRate: number;
   currentStock?: number;
 };
 
 type StockEntryItem = {
-  productId: string | { _id?: string; id?: string; productName?: string; mrp?: number; productRate?: number };
+  productId: string | { _id?: string; id?: string; productName?: string; productNameGujarati?: string; mrp?: number; productRate?: number };
   productName: string;
   mrp: number;
   productRate: number;
@@ -54,6 +55,7 @@ type LiveStockRow = {
   key: string;
   sequence: number;
   productName: string;
+  productNameGujarati?: string;
   available: number;
   rate: number;
   mrp: number;
@@ -84,6 +86,9 @@ const getProductIdValue = (productId?: StockEntryItem["productId"]) =>
   typeof productId === "object" ? productId?._id || productId?.id || "" : productId || "";
 
 const getProductKey = (product?: ProductOption) => product?._id || product?.id || "";
+
+const getProductLabel = (product?: { productName?: string; productNameGujarati?: string }) =>
+  [product?.productName, product?.productNameGujarati].filter(Boolean).join(" / ") || "-";
 
 const StocksDashboardPage: React.FC = () => {
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -189,6 +194,7 @@ const StocksDashboardPage: React.FC = () => {
       {
         sequence: number;
         productName: string;
+        productNameGujarati?: string;
         available: number;
         rate: number;
         mrp: number;
@@ -206,6 +212,7 @@ const StocksDashboardPage: React.FC = () => {
       stockMap.set(key, {
         sequence: Number(product.sequence || 0),
         productName: product.productName,
+        productNameGujarati: product.productNameGujarati,
         available: Math.max(0, Number(product.currentStock || 0)),
         rate: Number(product.productRate || 0),
         mrp: Number(product.mrp || 0),
@@ -224,6 +231,8 @@ const StocksDashboardPage: React.FC = () => {
         const current = stockMap.get(key) || {
           sequence: 0,
           productName: item.productName || "Unknown Product",
+          productNameGujarati:
+            typeof item.productId === "object" ? item.productId?.productNameGujarati : undefined,
           available: 0,
           rate: Number(item.productRate || 0),
           mrp: Number(item.mrp || 0),
@@ -260,6 +269,7 @@ const StocksDashboardPage: React.FC = () => {
           key,
           sequence: Number(value.sequence || 0),
           productName: value.productName,
+          productNameGujarati: value.productNameGujarati,
           available,
           rate: value.rate,
           mrp: value.mrp,
@@ -387,7 +397,7 @@ const StocksDashboardPage: React.FC = () => {
       title: "Product Name",
       dataIndex: "productName",
       key: "productName",
-      render: (value) => <Text strong style={{ color: THEME.dark }}>{value || "-"}</Text>,
+      render: (_, record) => <Text strong style={{ color: THEME.dark }}>{getProductLabel(record)}</Text>,
     },
     {
       title: "Live Stock",

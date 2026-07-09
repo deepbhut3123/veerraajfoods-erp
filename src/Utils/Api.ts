@@ -90,7 +90,9 @@ export const getAllAdminRoutes = async (params?: { search?: string }) => {
 
 export const addAdminRoute = async (data: {
   routeName: string;
+  routeNameGujarati?: string;
   cityName: string;
+  cityNameGujarati?: string;
 }) => {
   try {
     const response = await API.post("/admin/retailer/routes", data);
@@ -104,7 +106,9 @@ export const updateAdminRoute = async (
   id: string,
   data: {
     routeName: string;
+    routeNameGujarati?: string;
     cityName: string;
+    cityNameGujarati?: string;
   },
 ) => {
   try {
@@ -136,6 +140,7 @@ export const getAllAdminShops = async (params?: { search?: string }) => {
 export const addAdminShop = async (data: {
   routeId: string;
   shopName: string;
+  shopNameGujarati?: string;
   shopAddress: string;
   mobileNumber: string;
   latitude?: number;
@@ -155,6 +160,7 @@ export const updateAdminShop = async (
   data: {
     routeId: string;
     shopName: string;
+    shopNameGujarati?: string;
     shopAddress: string;
     mobileNumber: string;
     latitude?: number;
@@ -283,6 +289,7 @@ export const getAllProducts = async () => {
 
 export const addProduct = async (data: {
   productName: string;
+  productNameGujarati?: string;
   mrp: number;
   productRate: number;
 }) => {
@@ -298,6 +305,7 @@ export const updateProduct = async (
   id: string,
   data: {
     productName: string;
+    productNameGujarati?: string;
     mrp: number;
     productRate: number;
   },
@@ -391,6 +399,7 @@ export const getAllDealerProducts = async (params?: { search?: string }) => {
 export const addDealerProduct = async (data: {
   mrp: number;
   productName: string;
+  productNameGujarati?: string;
   productRate: number;
 }) => {
   try {
@@ -406,6 +415,7 @@ export const updateDealerProduct = async (
   data: {
     mrp: number;
     productName: string;
+    productNameGujarati?: string;
     productRate: number;
   },
 ) => {

@@ -32,12 +32,13 @@ type ProductOption = {
   _id?: string;
   id?: string;
   productName: string;
+  productNameGujarati?: string;
   mrp: number;
   productRate: number;
 };
 
 type StockEntryItem = {
-  productId: string | { _id?: string; id?: string; productName?: string; mrp?: number; productRate?: number };
+  productId: string | { _id?: string; id?: string; productName?: string; productNameGujarati?: string; mrp?: number; productRate?: number };
   productName: string;
   mrp: number;
   productRate: number;
@@ -92,6 +93,9 @@ const formatDate = (value?: string) => {
 const getEntryId = (entry?: StockEntryRow | null) => entry?._id || entry?.id || entry?.key || "";
 const getProductIdValue = (productId?: StockEntryItem["productId"]) =>
   typeof productId === "object" ? productId?._id || productId?.id || "" : productId || "";
+
+const getProductLabel = (product?: { productName?: string; productNameGujarati?: string }) =>
+  [product?.productName, product?.productNameGujarati].filter(Boolean).join(" / ") || "-";
 
 const StocksEntriesPage: React.FC = () => {
   const [data, setData] = useState<StockEntryRow[]>([]);
@@ -540,7 +544,7 @@ const StocksEntriesPage: React.FC = () => {
                       </Form.Item>
 
                       <div>
-                        <Text strong>{product?.productName || "-"}</Text>
+                        <Text strong>{getProductLabel(product)}</Text>
                       </div>
 
                       <div>

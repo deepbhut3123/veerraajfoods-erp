@@ -40,6 +40,7 @@ type DealerProductItem = {
   _id: string;
   mrp: number;
   productName: string;
+  productNameGujarati?: string;
   productRate: number;
   sequence?: number;
   createdAt?: string;
@@ -52,6 +53,7 @@ type DealerProductItem = {
 type DealerProductFormValues = {
   mrp: number;
   productName: string;
+  productNameGujarati?: string;
   productRate: number;
 };
 
@@ -114,6 +116,7 @@ const DealerProductsPage: React.FC = () => {
     form.setFieldsValue({
       mrp: item.mrp,
       productName: item.productName,
+      productNameGujarati: item.productNameGujarati,
       productRate: item.productRate,
     });
     setModalOpen(true);
@@ -127,12 +130,20 @@ const DealerProductsPage: React.FC = () => {
 
   const handleSubmit = async (values: DealerProductFormValues) => {
     setSaving(true);
+    const payload = {
+      mrp: values.mrp,
+      productName: values.productName,
+      ...(values.productNameGujarati?.trim()
+        ? { productNameGujarati: values.productNameGujarati.trim() }
+        : {}),
+      productRate: values.productRate,
+    };
     try {
       if (editingItem) {
-        await updateDealerProduct(editingItem._id, values);
+        await updateDealerProduct(editingItem._id, payload);
         message.success("Dealer product updated successfully");
       } else {
-        await addDealerProduct(values);
+        await addDealerProduct(payload);
         message.success("Dealer product created successfully");
       }
 
@@ -253,6 +264,12 @@ const DealerProductsPage: React.FC = () => {
       title: "Product",
       dataIndex: "productName",
       key: "productName",
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Text strong>{record.productName}</Typography.Text>
+          {record.productNameGujarati ? <Typography.Text type="secondary">{record.productNameGujarati}</Typography.Text> : null}
+        </Space>
+      ),
     },
     {
       title: "Rate",
@@ -513,7 +530,14 @@ const DealerProductsPage: React.FC = () => {
             </Form.Item>
           </div>
 
-          <div style={{ marginTop: 16 }}>
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 16,
+            }}
+          >
             <Form.Item
               label="Product"
               name="productName"
@@ -523,6 +547,18 @@ const DealerProductsPage: React.FC = () => {
               <Input
                 size="large"
                 placeholder="Enter product name"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Product (Gujarati)"
+              name="productNameGujarati"
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                size="large"
+                placeholder="ગુજરાતી પ્રોડક્ટ નામ લખો"
                 style={{ borderRadius: 12 }}
               />
             </Form.Item>

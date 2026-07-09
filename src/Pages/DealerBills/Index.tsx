@@ -55,6 +55,7 @@ type DealerProductOption = {
   _id: string;
   mrp: number;
   productName: string;
+  productNameGujarati?: string;
   productRate: number;
   sequence?: number;
 };
@@ -63,6 +64,7 @@ type StockProductOption = {
   _id: string;
   mrp: number;
   productName: string;
+  productNameGujarati?: string;
   productRate: number;
   currentStock?: number;
 };
@@ -234,6 +236,9 @@ const normalizeProductName = (value?: string) =>
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
+
+const getProductLabel = (product?: { productName?: string; productNameGujarati?: string }) =>
+  [product?.productName, product?.productNameGujarati].filter(Boolean).join(" / ") || "-";
 
 const resolveStockProduct = (
   productName: string | undefined,
@@ -1200,7 +1205,7 @@ const DealerBillsPage: React.FC = () => {
                     </div>
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>
-                        {product.productName}
+                        {getProductLabel(product)}
                       </div>
                       <div style={{ marginTop: 4, fontSize: 12, color: "#6b7280" }}>
                         {(() => {
@@ -1270,6 +1275,13 @@ const DealerBillsPage: React.FC = () => {
                 <Form.Item
                   name={["items", index, "productName"]}
                   initialValue={product.productName}
+                  style={{ marginBottom: 0 }}
+                >
+                  <Input />
+                </Form.Item>
+                <Form.Item
+                  name={["items", index, "productNameGujarati"]}
+                  initialValue={product.productNameGujarati}
                   style={{ marginBottom: 0 }}
                 >
                   <Input />

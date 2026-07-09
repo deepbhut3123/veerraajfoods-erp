@@ -44,6 +44,7 @@ type BillProductRef = {
   _id?: string;
   mrp?: number;
   productName?: string;
+  productNameGujarati?: string;
   productRate?: number;
 };
 
@@ -76,13 +77,16 @@ type BillItem = {
   shopId?: {
     _id?: string;
     shopName?: string;
+    shopNameGujarati?: string;
     shopAddress?: string;
     mobileNumber?: string;
   };
   routeId?: {
     _id?: string;
     routeName?: string;
+    routeNameGujarati?: string;
     cityName?: string;
+    cityNameGujarati?: string;
   };
   customerId?: {
     name?: string;
@@ -112,24 +116,30 @@ type SummaryRow = {
 type AdminRoute = {
   _id: string;
   routeName: string;
+  routeNameGujarati?: string;
   cityName: string;
+  cityNameGujarati?: string;
 };
 
 type AdminShop = {
   _id: string;
   shopName?: string;
+  shopNameGujarati?: string;
   shopAddress?: string;
   mobileNumber?: string;
   routeId?: {
     _id?: string;
     routeName?: string;
+    routeNameGujarati?: string;
     cityName?: string;
+    cityNameGujarati?: string;
   };
 };
 
 type ProductOption = {
   _id: string;
   productName: string;
+  productNameGujarati?: string;
   mrp?: number;
   productRate?: number;
 };
@@ -253,9 +263,30 @@ const getPartyName = (record: BillItem) =>
   record.customerName ||
   record.partyName ||
   record.shopName ||
-  record.shopId?.shopName ||
+  [record.shopId?.shopName, record.shopId?.shopNameGujarati].filter(Boolean).join(" / ") ||
   record.customerId?.name ||
   "-";
+
+const getRouteLabel = (route?: {
+  routeName?: string;
+  routeNameGujarati?: string;
+  cityName?: string;
+  cityNameGujarati?: string;
+}) => {
+  if (!route?.routeName && !route?.routeNameGujarati) {
+    return "-";
+  }
+
+  const routeName = [route.routeName, route.routeNameGujarati].filter(Boolean).join(" / ");
+  const cityName = [route.cityName, route.cityNameGujarati].filter(Boolean).join(" / ");
+  return cityName ? `${routeName}, ${cityName}` : routeName;
+};
+
+const getShopLabel = (shop?: { shopName?: string; shopNameGujarati?: string }) =>
+  [shop?.shopName, shop?.shopNameGujarati].filter(Boolean).join(" / ") || "Shop";
+
+const getProductLabel = (product?: { productName?: string; productNameGujarati?: string }) =>
+  [product?.productName, product?.productNameGujarati].filter(Boolean).join(" / ") || "-";
 
 const getBillAmount = (record: BillItem) =>
   record.amount ?? record.billAmount ?? record.totalAmount ?? record.grandTotal ?? record.netAmount ?? 0;
@@ -756,10 +787,7 @@ const BillsPage: React.FC = () => {
     {
       title: "Route",
       key: "route",
-      render: (_, record) =>
-        record.routeId?.routeName
-          ? `${record.routeId.routeName}${record.routeId.cityName ? `, ${record.routeId.cityName}` : ""}`
-          : "-",
+      render: (_, record) => getRouteLabel(record.routeId),
     },
     {
       title: "Status",
@@ -1069,7 +1097,7 @@ const BillsPage: React.FC = () => {
                 onChange={handleRouteChange}
                 options={routes.map((route) => ({
                   value: route._id,
-                  label: `${route.routeName}${route.cityName ? ` - ${route.cityName}` : ""}`,
+                  label: getRouteLabel(route),
                 }))}
               />
             </Form.Item>
@@ -1086,7 +1114,7 @@ const BillsPage: React.FC = () => {
                 disabled={!selectedRouteId}
                 options={filteredShops.map((shop) => ({
                   value: shop._id,
-                  label: shop.shopName || "Shop",
+                  label: getShopLabel(shop),
                 }))}
               />
             </Form.Item>
@@ -1115,7 +1143,7 @@ const BillsPage: React.FC = () => {
                         display: "inline-block",
                       }}
                     >
-                      {formatCurrency(product.mrp)} {product.productName}
+                      {formatCurrency(product.mrp)} {getProductLabel(product)}
                     </Text>
                   ),
                 },

@@ -38,6 +38,7 @@ const THEME = {
 type ProductItem = {
   _id: string;
   productName: string;
+  productNameGujarati?: string;
   mrp: number;
   productRate: number;
   sequence: number;
@@ -46,6 +47,7 @@ type ProductItem = {
 
 type ProductFormValues = {
   productName: string;
+  productNameGujarati?: string;
   mrp: number;
   productRate: number;
 };
@@ -91,6 +93,7 @@ const ProductsPage: React.FC = () => {
     form.setFieldsValue({
       mrp: item.mrp,
       productName: item.productName,
+      productNameGujarati: item.productNameGujarati,
       productRate: item.productRate,
     });
     setModalOpen(true);
@@ -104,12 +107,20 @@ const ProductsPage: React.FC = () => {
 
   const handleSubmit = async (values: ProductFormValues) => {
     setSaving(true);
+    const payload = {
+      productName: values.productName,
+      ...(values.productNameGujarati?.trim()
+        ? { productNameGujarati: values.productNameGujarati.trim() }
+        : {}),
+      mrp: values.mrp,
+      productRate: values.productRate,
+    };
     try {
       if (editingItem) {
-        await updateProduct(editingItem._id, values);
+        await updateProduct(editingItem._id, payload);
         message.success("Product updated successfully");
       } else {
-        await addProduct(values);
+        await addProduct(payload);
         message.success("Product created successfully");
       }
       closeModal();
@@ -211,6 +222,12 @@ const ProductsPage: React.FC = () => {
       dataIndex: "productName",
       key: "productName",
       width: 320,
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.productName}</Text>
+          {record.productNameGujarati ? <Text type="secondary">{record.productNameGujarati}</Text> : null}
+        </Space>
+      ),
     },
     {
       title: "Product Rate",
@@ -390,7 +407,7 @@ const ProductsPage: React.FC = () => {
         }}
         destroyOnClose
         centered
-        width={640}
+        width={860}
         styles={{
           header: {
             borderBottom: "1px solid rgba(0, 105, 92, 0.12)",
@@ -410,18 +427,38 @@ const ProductsPage: React.FC = () => {
         }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item
-            label="Product Name"
-            name="productName"
-            rules={[{ required: true, message: "Please enter product name" }]}
-            style={{ marginBottom: 0 }}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 16,
+            }}
           >
-            <Input
-              placeholder="Enter product name"
-              size="large"
-              style={{ borderRadius: 12 }}
-            />
-          </Form.Item>
+            <Form.Item
+              label="Product Name"
+              name="productName"
+              rules={[{ required: true, message: "Please enter product name" }]}
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                placeholder="Enter product name"
+                size="large"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Product Name (Gujarati)"
+              name="productNameGujarati"
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                placeholder="ગુજરાતી પ્રોડક્ટ નામ લખો"
+                size="large"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+          </div>
 
           <div
             style={{

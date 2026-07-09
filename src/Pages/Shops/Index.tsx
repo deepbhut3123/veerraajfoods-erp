@@ -50,6 +50,7 @@ const THEME = {
 type AdminShop = {
   _id: string;
   shopName: string;
+  shopNameGujarati?: string;
   shopAddress: string;
   mobileNumber: string;
   latitude?: number | string;
@@ -59,7 +60,9 @@ type AdminShop = {
   routeId?: {
     _id?: string;
     routeName?: string;
+    routeNameGujarati?: string;
     cityName?: string;
+    cityNameGujarati?: string;
   };
   userId?: {
     name?: string;
@@ -71,17 +74,31 @@ type AdminShop = {
 type AdminRoute = {
   _id: string;
   routeName: string;
+  routeNameGujarati?: string;
   cityName: string;
+  cityNameGujarati?: string;
 };
 
 type ShopFormValues = {
   routeId: string;
   shopName: string;
+  shopNameGujarati?: string;
   shopAddress: string;
   mobileNumber: string;
   latitude?: number;
   longitude?: number;
 };
+
+const getRouteLabel = (
+  route: Pick<AdminRoute, "routeName" | "routeNameGujarati" | "cityName" | "cityNameGujarati">,
+) => {
+  const routeName = [route.routeName, route.routeNameGujarati].filter(Boolean).join(" / ");
+  const cityName = [route.cityName, route.cityNameGujarati].filter(Boolean).join(" / ");
+  return cityName ? `${routeName} - ${cityName}` : routeName;
+};
+
+const getShopLabel = (shop: Pick<AdminShop, "shopName" | "shopNameGujarati">) =>
+  [shop.shopName, shop.shopNameGujarati].filter(Boolean).join(" / ");
 
 const DEFAULT_MAP_CENTER: [number, number] = [23.0225, 72.5714];
 
@@ -215,6 +232,7 @@ const ShopsPage: React.FC = () => {
     form.setFieldsValue({
       routeId: item.routeId?._id,
       shopName: item.shopName,
+      shopNameGujarati: item.shopNameGujarati,
       shopAddress: item.shopAddress,
       mobileNumber: item.mobileNumber,
       latitude:
@@ -294,6 +312,9 @@ const ShopsPage: React.FC = () => {
       const payload = {
         routeId: values.routeId,
         shopName: values.shopName,
+        ...(values.shopNameGujarati?.trim()
+          ? { shopNameGujarati: values.shopNameGujarati.trim() }
+          : {}),
         shopAddress: values.shopAddress,
         mobileNumber: values.mobileNumber,
         ...(values.latitude !== undefined ? { latitude: values.latitude } : {}),
@@ -342,6 +363,12 @@ const ShopsPage: React.FC = () => {
       title: "Shop Name",
       dataIndex: "shopName",
       key: "shopName",
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{record.shopName}</Text>
+          {record.shopNameGujarati ? <Text type="secondary">{record.shopNameGujarati}</Text> : null}
+        </Space>
+      ),
     },
     {
       title: "Mobile Number",
@@ -354,7 +381,7 @@ const ShopsPage: React.FC = () => {
       render: (_, record) =>
         record.routeId?.routeName ? (
           <Tag color="green">
-            {record.routeId.routeName}
+            {[record.routeId.routeName, record.routeId.routeNameGujarati].filter(Boolean).join(" / ")}
             {record.routeId.cityName ? ` - ${record.routeId.cityName}` : ""}
           </Tag>
         ) : (
@@ -569,7 +596,7 @@ const ShopsPage: React.FC = () => {
               placeholder="Select route"
               options={routes.map((route) => ({
                 value: route._id,
-                label: `${route.routeName}${route.cityName ? ` - ${route.cityName}` : ""}`,
+                label: getRouteLabel(route),
               }))}
             />
           </Form.Item>
@@ -577,7 +604,7 @@ const ShopsPage: React.FC = () => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
               gap: 16,
               marginTop: 16,
             }}
@@ -591,6 +618,18 @@ const ShopsPage: React.FC = () => {
               <Input
                 size="large"
                 placeholder="Enter shop name"
+                style={{ borderRadius: 12 }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Shop Name (Gujarati)"
+              name="shopNameGujarati"
+              style={{ marginBottom: 0 }}
+            >
+              <Input
+                size="large"
+                placeholder="ગુજરાતી દુકાન નામ લખો"
                 style={{ borderRadius: 12 }}
               />
             </Form.Item>
