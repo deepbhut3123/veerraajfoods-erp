@@ -97,9 +97,6 @@ const getRouteLabel = (
   return cityName ? `${routeName} - ${cityName}` : routeName;
 };
 
-const getShopLabel = (shop: Pick<AdminShop, "shopName" | "shopNameGujarati">) =>
-  [shop.shopName, shop.shopNameGujarati].filter(Boolean).join(" / ");
-
 const DEFAULT_MAP_CENTER: [number, number] = [23.0225, 72.5714];
 
 const ShopLocationPicker: React.FC<{
