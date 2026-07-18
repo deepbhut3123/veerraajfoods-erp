@@ -85,6 +85,8 @@ type DealerBillRecord = {
   billDate: string;
   kattaCount: number;
   totalAmount: number;
+  status?: string;
+  stockDeductedAt?: string | null;
   items?: DealerBillLineItem[];
   dealerId?: {
     _id?: string;
@@ -166,6 +168,41 @@ const formatExportDate = (value?: string) => {
   if (!value) return "-";
   const parsed = dayjs(value);
   return parsed.isValid() ? parsed.format("D-M-YYYY") : "-";
+};
+
+const normalizeStatus = (status?: string) => String(status || "ordered").trim().toLowerCase();
+
+const getStatusTagStyle = (status?: string): React.CSSProperties => {
+  const normalized = normalizeStatus(status);
+  if (normalized === "shipped") {
+    return {
+      color: "#00695C",
+      background: "rgba(0, 105, 92, 0.1)",
+      borderColor: "rgba(0, 105, 92, 0.24)",
+    };
+  }
+  if (normalized === "ordered") {
+    return {
+      color: "#b45309",
+      background: "rgba(245, 158, 11, 0.12)",
+      borderColor: "rgba(245, 158, 11, 0.24)",
+    };
+  }
+  if (normalized === "completed") {
+    return {
+      color: "#1d4ed8",
+      background: "rgba(59, 130, 246, 0.12)",
+      borderColor: "rgba(59, 130, 246, 0.24)",
+    };
+  }
+  if (normalized === "cancelled") {
+    return {
+      color: "#b91c1c",
+      background: "rgba(239, 68, 68, 0.1)",
+      borderColor: "rgba(239, 68, 68, 0.22)",
+    };
+  }
+  return {};
 };
 
 const createEmptyCustomItem = (): DealerBillCustomItem => ({
@@ -311,6 +348,7 @@ const DealerBillsPage: React.FC = () => {
     try {
       const response = await getAllDealerBills({
         search: search.trim() || undefined,
+        status: "shipped",
         fromDate: range?.[0] ? range[0].format("YYYY-MM-DD") : undefined,
         toDate: range?.[1] ? range[1].format("YYYY-MM-DD") : undefined,
       });
@@ -884,69 +922,83 @@ const DealerBillsPage: React.FC = () => {
       ),
     },
     {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      width: 120,
+      render: (value?: string) => {
+        const status = normalizeStatus(value);
+        return (
+          <Tag style={{ margin: 0, borderRadius: 999, fontWeight: 700, ...getStatusTagStyle(status) }}>
+            {status}
+          </Tag>
+        );
+      },
+    },
+    {
       title: "Actions",
       key: "actions",
       width: 120,
       render: (_, record) => (
-        <Space size="small">
-          <Tooltip title="Copy bill image">
-            <Button
-              type="text"
-              aria-label="Copy bill image"
-              onClick={(event) => {
-                event.stopPropagation();
-                void copyBillAsImage(record);
-              }}
-              icon={<CopyOutlined />}
-              loading={copyingImage && exportBill?._id === record._id}
-              style={{
-                color: THEME.mid,
-                borderRadius: 10,
-                width: 36,
-                height: 36,
-              }}
-            />
-          </Tooltip>
-          <Tooltip title="Edit bill">
-            <Button
-              type="text"
-              aria-label="Edit bill"
-              onClick={(event) => {
-                event.stopPropagation();
-                openEdit(record);
-              }}
-              icon={<EditOutlined />}
-              style={{
-                color: THEME.mid,
-                borderRadius: 10,
-                width: 36,
-                height: 36,
-              }}
-            />
-          </Tooltip>
-          <Popconfirm
-            title="Delete bill"
-            description="Are you sure you want to delete this dealer bill?"
-            okText="Delete"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => handleDelete(record._id)}
-          >
-            <Tooltip title="Delete bill">
+          <Space size="small">
+            <Tooltip title="Copy bill image">
               <Button
                 type="text"
-                aria-label="Delete bill"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={(event) => event.stopPropagation()}
+                aria-label="Copy bill image"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void copyBillAsImage(record);
+                }}
+                icon={<CopyOutlined />}
+                loading={copyingImage && exportBill?._id === record._id}
                 style={{
+                  color: THEME.mid,
                   borderRadius: 10,
                   width: 36,
                   height: 36,
                 }}
               />
             </Tooltip>
-          </Popconfirm>
-        </Space>
+            <Tooltip title="Edit bill">
+              <Button
+                type="text"
+                aria-label="Edit bill"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openEdit(record);
+                }}
+                icon={<EditOutlined />}
+                style={{
+                  color: THEME.mid,
+                  borderRadius: 10,
+                  width: 36,
+                  height: 36,
+                }}
+              />
+            </Tooltip>
+            <Popconfirm
+              title="Delete bill"
+              description="Are you sure you want to delete this dealer bill?"
+              okText="Delete"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => handleDelete(record._id)}
+            >
+              <Tooltip title="Delete bill">
+                <Button
+                  type="text"
+                  aria-label="Delete bill"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={(event) => event.stopPropagation()}
+                  style={{
+                    borderRadius: 10,
+                    width: 36,
+                    height: 36,
+                  }}
+                />
+              </Tooltip>
+            </Popconfirm>
+          </Space>
       ),
     },
   ];

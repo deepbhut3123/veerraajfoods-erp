@@ -136,6 +136,12 @@ const MENU_ITEMS: SidebarMenuItem[] = [
         link: "/dealer-bills",
       },
       {
+        key: "orders",
+        icon: <FileTextOutlined style={{ color: "inherit" }} />,
+        text: "Orders",
+        link: "/orders",
+      },
+      {
         key: "dealer-payments",
         icon: <CreditCardOutlined style={{ color: "inherit" }} />,
         text: "Payments",
@@ -303,6 +309,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       "/dealers": "Dealers",
       "/dealer-products": "Dealer Products",
       "/dealer-bills": "Dealer Bills",
+      "/orders": "Orders",
       "/dealer-payments": "Dealer Payments",
       "/dealer-statement": "Dealer Statement",
       "/stocks-dashboard": "Stocks Dashboard",

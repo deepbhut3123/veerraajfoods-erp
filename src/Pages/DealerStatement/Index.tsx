@@ -229,6 +229,7 @@ const DealerStatementPage: React.FC = () => {
         const [billsRes, paymentsRes] = await Promise.all([
           getAllDealerBills({
             dealerId: selectedDealerId,
+            status: "shipped",
             fromDate,
             toDate,
           }),

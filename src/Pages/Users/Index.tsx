@@ -11,6 +11,7 @@ import {
   Space,
   Switch,
   Table,
+  Tabs,
   Tag,
   Tooltip,
   Typography,
@@ -39,6 +40,7 @@ type UserItem = {
   id?: string;
   name: string;
   email: string;
+  mobileNumber?: string;
   roleId: number;
   salary?: number | null;
   isActive: boolean;
@@ -49,6 +51,7 @@ type UserItem = {
 type UserFormValues = {
   name: string;
   email: string;
+  mobileNumber?: string;
   password?: string;
   roleId: number;
   salary?: number | null;
@@ -80,6 +83,7 @@ const UsersPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<UserItem | null>(null);
+  const [activeRoleTab, setActiveRoleTab] = useState("all");
   const [form] = Form.useForm<UserFormValues>();
   const selectedRoleId = Form.useWatch("roleId", form);
 
@@ -105,6 +109,30 @@ const UsersPage: React.FC = () => {
     loadUsers();
   }, []);
 
+  const roleTabs = useMemo(() => {
+    const total = data.length;
+
+    return [
+      {
+        key: "all",
+        label: `All (${total})`,
+      },
+      ...ROLE_OPTIONS.map((role) => ({
+        key: String(role.value),
+        label: `${role.label} (${data.filter((user) => user.roleId === role.value).length})`,
+      })),
+    ];
+  }, [data]);
+
+  const filteredUsers = useMemo(() => {
+    if (activeRoleTab === "all") {
+      return data;
+    }
+
+    const roleId = Number(activeRoleTab);
+    return data.filter((user) => user.roleId === roleId);
+  }, [activeRoleTab, data]);
+
   const openCreate = () => {
     setEditingItem(null);
     form.resetFields();
@@ -117,6 +145,7 @@ const UsersPage: React.FC = () => {
     form.setFieldsValue({
       name: item.name,
       email: item.email,
+      mobileNumber: item.mobileNumber || "",
       roleId: item.roleId,
       salary: item.salary ?? null,
       isActive: item.isActive,
@@ -138,6 +167,7 @@ const UsersPage: React.FC = () => {
         const payload: any = {
           name: values.name,
           email: values.email,
+          mobileNumber: values.mobileNumber?.trim() || "",
           roleId: values.roleId,
           salary: values.roleId === 5 ? values.salary ?? null : null,
           isActive: values.isActive,
@@ -153,6 +183,7 @@ const UsersPage: React.FC = () => {
         await addUser({
           name: values.name,
           email: values.email,
+          mobileNumber: values.mobileNumber?.trim() || "",
           password: values.password || "",
           roleId: values.roleId,
           salary: values.roleId === 5 ? values.salary ?? null : null,
@@ -195,15 +226,26 @@ const UsersPage: React.FC = () => {
       title: "Name",
       dataIndex: "name",
       key: "name",
+      width: 220,
     },
     {
       title: "Email",
       dataIndex: "email",
       key: "email",
+      width: 320,
+      render: (value) => value || "-",
+    },
+    {
+      title: "Mobile Number",
+      dataIndex: "mobileNumber",
+      key: "mobileNumber",
+      width: 180,
+      render: (value) => value || "-",
     },
     {
       title: "Role",
       key: "roleId",
+      width: 190,
       render: (_, record) => {
         const meta = getRoleMeta(record.roleId);
 
@@ -228,6 +270,7 @@ const UsersPage: React.FC = () => {
     {
       title: "Status",
       key: "isActive",
+      width: 190,
       render: (_, record) => (
         <Space
           size={8}
@@ -263,6 +306,7 @@ const UsersPage: React.FC = () => {
     {
       title: "Actions",
       key: "actions",
+      width: 160,
       render: (_, record) => {
         const recordId = record._id || record.id || "";
         const isSelf = recordId === currentUserId;
@@ -314,20 +358,25 @@ const UsersPage: React.FC = () => {
 
   return (
     <div
+      className="users-page"
       style={{
-        padding: 20,
+        padding: 12,
         background:
           "linear-gradient(180deg, #f6fbfb 0%, #eef6f5 45%, #f8fafc 100%)",
         minHeight: "calc(100vh - 50px)",
+        height: "calc(100vh - 50px)",
+        overflow: "hidden",
       }}
     >
       <Card
+        className="users-card"
         bordered={false}
         style={{
           borderRadius: 18,
           boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
           border: "1px solid rgba(0, 105, 92, 0.08)",
           overflow: "hidden",
+          height: "100%",
         }}
       >
         <Space
@@ -335,7 +384,7 @@ const UsersPage: React.FC = () => {
           style={{
             width: "100%",
             justifyContent: "space-between",
-            marginBottom: 12,
+            marginBottom: 4,
             gap: 16,
             flexWrap: "wrap",
           }}
@@ -368,16 +417,26 @@ const UsersPage: React.FC = () => {
             <Text type="danger">{error}</Text>
           </div>
         ) : (
-          <Table
-            style={{ marginTop: 20 }}
-            rowKey={(record) => record._id || record.id || record.email}
-            loading={loading}
-            dataSource={data}
-            pagination={false}
-            scroll={{ x: "max-content", y: 520 }}
-            columns={columns}
-            rowClassName={() => "user-row"}
-          />
+          <>
+            <Tabs
+              className="users-role-tabs"
+              activeKey={activeRoleTab}
+              onChange={setActiveRoleTab}
+              items={roleTabs}
+              style={{ marginTop: 4 }}
+            />
+            <Table
+              className="users-table"
+              style={{ marginTop: 4 }}
+              rowKey={(record) => record._id || record.id || record.email}
+              loading={loading}
+              dataSource={filteredUsers}
+              pagination={false}
+              scroll={{ x: 1260, y: "calc(100vh - 250px)" }}
+              columns={columns}
+              rowClassName={() => "user-row"}
+            />
+          </>
         )}
       </Card>
 
@@ -429,7 +488,7 @@ const UsersPage: React.FC = () => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
               gap: 16,
             }}
           >
@@ -449,6 +508,14 @@ const UsersPage: React.FC = () => {
               style={{ marginBottom: 0 }}
             >
               <Input size="large" placeholder="Enter email" style={{ borderRadius: 12 }} />
+            </Form.Item>
+
+            <Form.Item
+              label="Mobile Number"
+              name="mobileNumber"
+              style={{ marginBottom: 0 }}
+            >
+              <Input size="large" placeholder="Enter mobile number" style={{ borderRadius: 12 }} />
             </Form.Item>
           </div>
 

@@ -196,7 +196,7 @@ const DealerPage: React.FC = () => {
 
     try {
       const [billsRes, paymentsRes] = await Promise.all([
-        getAllDealerBills({ dealerId: dealer._id }),
+        getAllDealerBills({ dealerId: dealer._id, status: "shipped" }),
         getAllDealerPayments({ dealerId: dealer._id }),
       ]);
 
@@ -227,8 +227,23 @@ const DealerPage: React.FC = () => {
         await updateDealer(editingItem._id, values);
         message.success("Dealer updated successfully");
       } else {
-        await addDealer(values);
-        message.success("Dealer created successfully");
+        const response = await addDealer(values);
+        if (response?.temporaryPassword) {
+          Modal.info({
+            title: "Dealer login created",
+            content: (
+              <Space direction="vertical" size={4}>
+                <Text>Mobile number: {values.contactNo}</Text>
+                <Text>
+                  Temporary password: <Text strong copyable>{response.temporaryPassword}</Text>
+                </Text>
+              </Space>
+            ),
+            okText: "Done",
+          });
+        } else {
+          message.success("Dealer created successfully");
+        }
       }
 
       closeModal();

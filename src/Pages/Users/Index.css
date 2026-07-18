@@ -1,7 +1,76 @@
+.users-page {
+  box-sizing: border-box;
+}
+
+.users-card .ant-card-body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 18px 24px 12px;
+}
+
+.users-role-tabs {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.users-role-tabs .ant-tabs-nav {
+  margin-bottom: 4px;
+}
+
+.users-role-tabs .ant-tabs-nav-wrap {
+  overflow: auto hidden;
+}
+
+.users-role-tabs .ant-tabs-nav-list {
+  min-width: max-content;
+}
+
+.users-table {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.users-table .ant-table-wrapper,
+.users-table .ant-spin-nested-loading,
+.users-table .ant-spin-container,
+.users-table .ant-table,
+.users-table .ant-table-container {
+  min-width: 0;
+}
+
+.users-table .ant-table-body {
+  scrollbar-gutter: stable;
+}
+
+.users-table .ant-table-cell {
+  white-space: nowrap;
+}
+
 .user-row:hover > td {
   background: #f0fffd !important;
 }
 
 .user-row td {
   transition: background-color 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .users-page {
+    height: calc(100vh - 50px) !important;
+    padding: 8px !important;
+  }
+
+  .users-card {
+    border-radius: 14px !important;
+  }
+
+  .users-card .ant-card-body {
+    padding: 14px !important;
+  }
+
+  .users-table .ant-table-body {
+    max-height: calc(100vh - 250px) !important;
+  }
 }

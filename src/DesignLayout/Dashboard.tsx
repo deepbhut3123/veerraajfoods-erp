@@ -716,6 +716,7 @@ const Dashboard: React.FC = () => {
           getAllDealerBills({
             month: selectedMonth,
             year: selectedYear,
+            status: "shipped",
           }),
           getAllDealers(),
         ]);
@@ -753,6 +754,7 @@ const Dashboard: React.FC = () => {
           }),
           getAllDealerBills({
             year: revenueYear,
+            status: "shipped",
           }),
         ]);
 

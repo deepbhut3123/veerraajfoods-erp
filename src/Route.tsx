@@ -6,6 +6,7 @@ import DealerPage from "./Pages/DealerManagement/Index";
 import DealerPaymentsPage from "./Pages/DealerPayments/Index";
 import DealerProductsPage from "./Pages/DealerProducts/Index";
 import DealerStatementPage from "./Pages/DealerStatement/Index";
+import OrdersPage from "./Pages/Orders/Index";
 import ExpenseEntriesPage from "./Pages/Expense/Entries";
 import ExpensePurchasesPage from "./Pages/Expense/Purchase";
 import OnlineCustomersPage from "./Pages/OnlineOrders/Customers";
@@ -79,6 +80,11 @@ const AdminRoutes = [
     path: "/dealer-bills",
     name: "Dealer Bills",
     component: DealerBillsPage,
+  },
+  {
+    path: "/orders",
+    name: "Orders",
+    component: OrdersPage,
   },
   {
     path: "/dealer-payments",

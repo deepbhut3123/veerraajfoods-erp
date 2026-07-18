@@ -278,6 +278,18 @@ export const assignAdminBillsToDeliveryMan = async (
   }
 };
 
+export const markAdminBillsAsShipped = async (billIds: string[]) => {
+  try {
+    const response = await API.patch("/admin/retailer/bills/ship", {
+      billIds,
+      status: "shipped",
+    });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const getAllProducts = async () => {
   try {
     const response = await API.get("/admin/retailer/products");
@@ -448,6 +460,7 @@ export const reorderDealerProducts = async (productIds: string[]) => {
 export const getAllDealerBills = async (params?: {
   search?: string;
   dealerId?: string;
+  status?: string;
   month?: number;
   year?: number;
   fromDate?: string;
@@ -455,6 +468,19 @@ export const getAllDealerBills = async (params?: {
 }) => {
   try {
     const response = await API.get("/admin/dealer/bills", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const markDealerBillsAsShipped = async (billIds: string[], kattaCount?: number) => {
+  try {
+    const response = await API.patch("/admin/dealer/bills/ship", {
+      billIds,
+      kattaCount,
+      status: "shipped",
+    });
     return response.data;
   } catch (error) {
     throw error;
@@ -581,6 +607,7 @@ export const getAllUsers = async () => {
 export const addUser = async (data: {
   name: string;
   email: string;
+  mobileNumber?: string;
   password: string;
   roleId: number;
   salary?: number | null;
@@ -599,6 +626,7 @@ export const updateUser = async (
   data: {
     name?: string;
     email?: string;
+    mobileNumber?: string;
     password?: string;
     roleId?: number;
     salary?: number | null;
