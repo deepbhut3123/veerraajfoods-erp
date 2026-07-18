@@ -155,7 +155,6 @@ const OnlineCustomersPage: React.FC = () => {
     }
   };
 
-  const customerCount = data.length;
   const columns: ColumnsType<OnlineCustomerItem> = [
     {
       title: "#",

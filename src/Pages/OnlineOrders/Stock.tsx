@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Button,
   Card,
   DatePicker,
@@ -193,47 +192,6 @@ const OnlineStockPage: React.FC = () => {
       items: buildInitialProductRows(),
     });
     setModalOpen(true);
-  };
-
-  const openEdit = (entry: OnlineStockEntryRow) => {
-    const entryId = getEntryId(entry);
-
-    if (!entryId) {
-      message.error("Stock entry id is missing");
-      return;
-    }
-
-    const loadEntry = async () => {
-      setSaving(true);
-      try {
-        const response = await getOnlineStockEntryById(entryId);
-        const currentEntry = response?.data as OnlineStockEntryRow;
-        const quantityMap = new Map(
-          (currentEntry?.items || []).map((item) => [getProductIdValue(item.productId), item.quantity]),
-        );
-
-        setEditingItem(currentEntry);
-        form.setFieldsValue({
-          entryDate: dayjs(currentEntry.entryDate),
-          items: products.map((product) => {
-            const productId = product._id || product.id || "";
-            return {
-              productId,
-              quantity: quantityMap.get(productId) || 0,
-            };
-          }),
-        });
-        setModalOpen(true);
-      } catch (err: any) {
-        message.error(
-          err?.response?.data?.message || err?.message || "Failed to load online stock entry",
-        );
-      } finally {
-        setSaving(false);
-      }
-    };
-
-    void loadEntry();
   };
 
   const closeModal = () => {

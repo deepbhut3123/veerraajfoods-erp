@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Button,
@@ -222,7 +222,7 @@ const OnlineOrdersPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateRangeFilter, setDateRangeFilter] = useState<OrderDateRange>(null);
 
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -239,7 +239,7 @@ const OnlineOrdersPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRangeFilter, paymentFilter, statusFilter]);
 
   const loadMasterData = async () => {
     try {
@@ -263,7 +263,7 @@ const OnlineOrdersPage: React.FC = () => {
 
   useEffect(() => {
     void loadOrders();
-  }, [paymentFilter, statusFilter, dateRangeFilter]);
+  }, [loadOrders]);
 
   const currentCustomerId = Form.useWatch("customerId", form);
   const watchedItems = Form.useWatch("items", form);
