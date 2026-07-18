@@ -149,7 +149,7 @@ const OrdersPage: React.FC = () => {
   const [shipKattaCount, setShipKattaCount] = useState<number | null>(null);
   const exportCardRef = useRef<HTMLDivElement | null>(null);
   const [form] = Form.useForm<OrderFormValues>();
-  const watchedItems = Form.useWatch("items", form) || [];
+  const watchedItems = Form.useWatch("items", form);
 
   const draftTotal = useMemo(
     () =>
