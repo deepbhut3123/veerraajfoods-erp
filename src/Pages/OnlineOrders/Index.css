@@ -1,0 +1,268 @@
+.online-module-row:hover > td {
+  background: #f0fffd !important;
+}
+
+.online-module-row td {
+  transition: background-color 0.2s ease;
+}
+
+.online-module-table .ant-table-thead > tr > th {
+  background: #f0faf8;
+  color: #004d40;
+}
+
+.online-module-table .ant-table-tbody > tr > td {
+  border-bottom-color: #ebf3f1;
+}
+
+.online-order-filters {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.online-order-filters .ant-select {
+  width: 160px;
+}
+
+.online-order-filters .ant-picker {
+  width: 250px;
+}
+
+.online-order-filters .ant-select-selector,
+.online-order-filters .ant-picker {
+  border-radius: 10px !important;
+  border-color: #cfe0db !important;
+  box-shadow: none !important;
+}
+
+.online-order-filters .ant-select:hover .ant-select-selector,
+.online-order-filters .ant-select-focused .ant-select-selector,
+.online-order-filters .ant-picker:hover,
+.online-order-filters .ant-picker-focused {
+  border-color: #0f766e !important;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.08) !important;
+}
+
+.online-order-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.online-order-action-btn.ant-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 0.18s ease,
+    color 0.18s ease;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.online-order-action-btn.ant-btn .anticon {
+  font-size: 15px;
+}
+
+.online-order-action-btn.ant-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  background: transparent !important;
+}
+
+.online-order-action-btn.ant-btn:not(:disabled):active {
+  transform: translateY(0);
+}
+
+.online-order-action-btn--edit.ant-btn {
+  color: #0f766e;
+}
+
+.online-order-action-btn--edit.ant-btn:not(:disabled):hover {
+  color: #0b5f59;
+}
+
+.online-order-action-btn--deliver.ant-btn {
+  color: #15803d;
+}
+
+.online-order-action-btn--deliver.ant-btn:not(:disabled):hover {
+  color: #166534;
+}
+
+.online-order-action-btn--payment.ant-btn {
+  color: #2563eb;
+}
+
+.online-order-action-btn--payment.ant-btn:not(:disabled):hover {
+  color: #1d4ed8;
+}
+
+.online-order-action-btn--delete.ant-btn {
+  color: #dc2626;
+}
+
+.online-order-action-btn--delete.ant-btn:not(:disabled):hover {
+  color: #b91c1c;
+}
+
+.online-order-action-btn.ant-btn:disabled,
+.online-order-action-btn.ant-btn[disabled] {
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+.online-customer-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: center;
+}
+
+.online-customer-picker__select.ant-select {
+  width: 100%;
+}
+
+.online-customer-picker__select .ant-select-selector {
+  min-height: 36px !important;
+  padding-inline: 12px !important;
+  display: flex;
+  align-items: center;
+  border-radius: 10px !important;
+  border-color: #cfe0db !important;
+  background: #ffffff !important;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease !important;
+}
+
+.online-customer-picker__select.ant-select:hover .ant-select-selector,
+.online-customer-picker__select.ant-select-focused .ant-select-selector {
+  border-color: #0f766e !important;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.08) !important;
+}
+
+.online-customer-picker__select .ant-select-selection-placeholder,
+.online-customer-picker__select .ant-select-selection-item {
+  line-height: 34px !important;
+  font-size: 14px;
+}
+
+.online-customer-picker__add-btn.ant-btn {
+  width: 42px;
+  min-width: 42px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #00695c;
+  color: #ffffff;
+  background: linear-gradient(135deg, #00695c 0%, #0f766e 100%);
+  box-shadow: 0 7px 16px rgba(0, 105, 92, 0.22);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.online-customer-picker__add-btn.ant-btn .anticon {
+  font-size: 16px;
+}
+
+.online-customer-picker__add-btn.ant-btn:hover {
+  color: #ffffff !important;
+  border-color: #004d40 !important;
+  background: linear-gradient(135deg, #004d40 0%, #0b5f59 100%) !important;
+  box-shadow: 0 10px 22px rgba(0, 105, 92, 0.28);
+  transform: translateY(-1px);
+}
+
+.online-customer-picker__add-btn.ant-btn:active {
+  transform: translateY(0);
+}
+
+.online-module-modal .ant-modal-content {
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.online-module-modal .ant-modal-header {
+  padding-bottom: 12px;
+}
+
+.online-module-modal .ant-modal-title {
+  color: #004d40;
+  font-weight: 700;
+}
+
+.online-module-modal .ant-modal-body {
+  padding-top: 12px;
+}
+
+.online-module-modal .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.online-module-modal .ant-form-item-label > label {
+  color: #004d40;
+  font-weight: 600;
+}
+
+.online-module-modal .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+.online-module-modal .ant-input,
+.online-module-modal .ant-input-number,
+.online-module-modal .ant-input-affix-wrapper,
+.online-module-modal .ant-picker,
+.online-module-modal .ant-select-selector {
+  border-color: #d1d5db !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+.online-module-modal .ant-input-number,
+.online-module-modal .ant-picker,
+.online-module-modal .ant-select {
+  width: 100%;
+}
+
+.online-module-modal .ant-input:hover,
+.online-module-modal .ant-input-number:hover,
+.online-module-modal .ant-input-affix-wrapper:hover,
+.online-module-modal .ant-picker:hover,
+.online-module-modal .ant-select:hover .ant-select-selector,
+.online-module-modal .ant-select-focused .ant-select-selector,
+.online-module-modal .ant-picker-focused,
+.online-module-modal .ant-input-affix-wrapper-focused,
+.online-module-modal .ant-input:focus,
+.online-module-modal .ant-input-number-focused {
+  border-color: #9ca3af !important;
+  box-shadow: none !important;
+}
+
+.online-module-modal .ant-input,
+.online-module-modal .ant-input-number-input,
+.online-module-modal .ant-picker-input > input,
+.online-module-modal .ant-select-selection-item,
+.online-module-modal .ant-select-selection-placeholder {
+  min-height: 18px;
+}
+
+.online-module-modal .online-module-table .ant-table-thead > tr > th,
+.online-module-modal .online-module-table .ant-table-tbody > tr > td {
+  padding: 8px 10px;
+}
+
+.online-module-modal .online-module-table .ant-table-summary > tr > td {
+  padding: 8px 10px;
+}

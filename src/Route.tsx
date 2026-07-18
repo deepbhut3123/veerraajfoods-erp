@@ -8,6 +8,10 @@ import DealerProductsPage from "./Pages/DealerProducts/Index";
 import DealerStatementPage from "./Pages/DealerStatement/Index";
 import ExpenseEntriesPage from "./Pages/Expense/Entries";
 import ExpensePurchasesPage from "./Pages/Expense/Purchase";
+import OnlineCustomersPage from "./Pages/OnlineOrders/Customers";
+import OnlineOrdersPage from "./Pages/OnlineOrders/Orders";
+import OnlineProductsPage from "./Pages/OnlineOrders/Products";
+import OnlineStockPage from "./Pages/OnlineOrders/Stock";
 import StocksDashboardPage from "./Pages/Stocks/Dashboard";
 import StocksEntriesPage from "./Pages/Stocks/Entries";
 import RoutesPage from "./Pages/Routes/Index";
@@ -40,6 +44,26 @@ const AdminRoutes = [
     path: "/products",
     name: "Products",
     component: ProductsPage,
+  },
+  {
+    path: "/online-orders",
+    name: "Online Orders",
+    component: OnlineOrdersPage,
+  },
+  {
+    path: "/online-products",
+    name: "Online Products",
+    component: OnlineProductsPage,
+  },
+  {
+    path: "/online-stock",
+    name: "Online Stock",
+    component: OnlineStockPage,
+  },
+  {
+    path: "/online-customers",
+    name: "Online Customers",
+    component: OnlineCustomersPage,
   },
   {
     path: "/dealers",

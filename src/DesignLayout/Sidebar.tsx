@@ -82,6 +82,37 @@ const MENU_ITEMS: SidebarMenuItem[] = [
     ],
   },
   {
+    key: "online-orders-group",
+    icon: <ShoppingCartOutlined style={{ color: "inherit" }} />,
+    text: "Online Orders",
+    children: [
+      {
+        key: "online-orders",
+        icon: <FileTextOutlined style={{ color: "inherit" }} />,
+        text: "Orders",
+        link: "/online-orders",
+      },
+      {
+        key: "online-products",
+        icon: <DatabaseOutlined style={{ color: "inherit" }} />,
+        text: "Products",
+        link: "/online-products",
+      },
+      {
+        key: "online-stock",
+        icon: <InboxOutlined style={{ color: "inherit" }} />,
+        text: "Stock",
+        link: "/online-stock",
+      },
+      {
+        key: "online-customers",
+        icon: <TeamOutlined style={{ color: "inherit" }} />,
+        text: "Customer",
+        link: "/online-customers",
+      },
+    ],
+  },
+  {
     key: "dealer-group",
     icon: <TeamOutlined style={{ color: "inherit" }} />,
     text: "Dealer",
@@ -265,6 +296,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       "/shops": "Retailer Shops",
       "/bills": "Retailer Bills",
       "/products": "Retailer Products",
+      "/online-orders": "Online Orders",
+      "/online-products": "Online Products",
+      "/online-stock": "Online Stock",
+      "/online-customers": "Online Customers",
       "/dealers": "Dealers",
       "/dealer-products": "Dealer Products",
       "/dealer-bills": "Dealer Bills",

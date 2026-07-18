@@ -882,3 +882,248 @@ export const deleteExpenseEntry = async (id: string) => {
     throw error;
   }
 };
+
+export const getAllOnlineCustomers = async (params?: { search?: string }) => {
+  try {
+    const response = await API.get("/admin/online/customers", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const addOnlineCustomer = async (data: {
+  name: string;
+  phoneNumber: string;
+  address: string;
+}) => {
+  try {
+    const response = await API.post("/admin/online/customers", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateOnlineCustomer = async (
+  id: string,
+  data: {
+    name: string;
+    phoneNumber: string;
+    address: string;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/online/customers/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteOnlineCustomer = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/online/customers/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllOnlineProducts = async (params?: { search?: string }) => {
+  try {
+    const response = await API.get("/admin/online/products", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const addOnlineProduct = async (data: {
+  name: string;
+  weight: string;
+  mrp: number;
+}) => {
+  try {
+    const response = await API.post("/admin/online/products", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateOnlineProduct = async (
+  id: string,
+  data: {
+    name: string;
+    weight: string;
+    mrp: number;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/online/products/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteOnlineProduct = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/online/products/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllOnlineStockEntries = async () => {
+  try {
+    const response = await API.get("/admin/online/stocks");
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getOnlineStockEntryById = async (id: string) => {
+  try {
+    const response = await API.get(`/admin/online/stocks/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const createOnlineStockEntry = async (data: {
+  entryDate: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+}) => {
+  try {
+    const response = await API.post("/admin/online/stocks", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateOnlineStockEntry = async (
+  id: string,
+  data: {
+    entryDate: string;
+    items: Array<{
+      productId: string;
+      quantity: number;
+    }>;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/online/stocks/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteOnlineStockEntry = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/online/stocks/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getAllOnlineOrders = async (params?: {
+  paymentReceived?: boolean;
+  status?: string;
+  fromDate?: string;
+  toDate?: string;
+}) => {
+  try {
+    const response = await API.get("/admin/online/orders", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getOnlineOrderById = async (id: string) => {
+  try {
+    const response = await API.get(`/admin/online/orders/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const createOnlineOrder = async (data: {
+  orderDate: string;
+  customerId: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
+}) => {
+  try {
+    const response = await API.post("/admin/online/orders", data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateOnlineOrder = async (
+  id: string,
+  data: {
+    orderDate: string;
+    customerId: string;
+    items: Array<{
+      productId: string;
+      quantity: number;
+    }>;
+  },
+) => {
+  try {
+    const response = await API.put(`/admin/online/orders/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteOnlineOrder = async (id: string) => {
+  try {
+    const response = await API.delete(`/admin/online/orders/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const markOnlineOrderDelivered = async (id: string) => {
+  try {
+    const response = await API.patch(`/admin/online/orders/${id}/delivery`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const completeOnlineOrderPayment = async (
+  id: string,
+  data: {
+    paymentAmount: number;
+    paymentType: string;
+  },
+) => {
+  try {
+    const response = await API.patch(`/admin/online/orders/${id}/payment`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
