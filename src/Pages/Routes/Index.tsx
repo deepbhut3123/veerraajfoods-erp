@@ -90,13 +90,13 @@ type RouteFormValues = {
 const getRouteLabel = (
   route: Pick<AdminRoute, "routeName" | "routeNameGujarati" | "cityName" | "cityNameGujarati">,
 ) => {
-  const routeName = [route.routeName, route.routeNameGujarati].filter(Boolean).join(" / ");
-  const cityName = [route.cityName, route.cityNameGujarati].filter(Boolean).join(" / ");
+  const routeName = route.routeName;
+  const cityName = route.cityName;
   return cityName ? `${routeName} - ${cityName}` : routeName;
 };
 
 const getShopLabel = (shop: Pick<AdminShop, "shopName" | "shopNameGujarati">) =>
-  [shop.shopName, shop.shopNameGujarati].filter(Boolean).join(" / ");
+  shop.shopName;
 
 const getCoordinateValue = (value?: number | string) => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -386,23 +386,13 @@ const RoutesPage: React.FC = () => {
       title: "Route Name",
       dataIndex: "routeName",
       key: "routeName",
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{record.routeName}</Text>
-          {record.routeNameGujarati ? <Text type="secondary">{record.routeNameGujarati}</Text> : null}
-        </Space>
-      ),
+      render: (_, record) => <Text strong>{record.routeName}</Text>,
     },
     {
       title: "City",
       dataIndex: "cityName",
       key: "cityName",
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text>{record.cityName}</Text>
-          {record.cityNameGujarati ? <Text type="secondary">{record.cityNameGujarati}</Text> : null}
-        </Space>
-      ),
+      render: (_, record) => <Text>{record.cityName}</Text>,
     },
     {
       title: "Created By",
@@ -653,7 +643,6 @@ const RoutesPage: React.FC = () => {
                 >
                   <Space direction="vertical" size={4}>
                     <Text strong>{shop.shopName}</Text>
-                    {shop.shopNameGujarati ? <Text type="secondary">{shop.shopNameGujarati}</Text> : null}
                     <Text>{shop.shopAddress || "-"}</Text>
                     <Text type="secondary">Mobile: {shop.mobileNumber || "-"}</Text>
                     <Text type="secondary">

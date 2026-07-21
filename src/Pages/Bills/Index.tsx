@@ -263,7 +263,7 @@ const getPartyName = (record: BillItem) =>
   record.customerName ||
   record.partyName ||
   record.shopName ||
-  [record.shopId?.shopName, record.shopId?.shopNameGujarati].filter(Boolean).join(" / ") ||
+  record.shopId?.shopName ||
   record.customerId?.name ||
   "-";
 
@@ -273,20 +273,20 @@ const getRouteLabel = (route?: {
   cityName?: string;
   cityNameGujarati?: string;
 }) => {
-  if (!route?.routeName && !route?.routeNameGujarati) {
+  if (!route?.routeName) {
     return "-";
   }
 
-  const routeName = [route.routeName, route.routeNameGujarati].filter(Boolean).join(" / ");
-  const cityName = [route.cityName, route.cityNameGujarati].filter(Boolean).join(" / ");
+  const routeName = route.routeName;
+  const cityName = route.cityName;
   return cityName ? `${routeName}, ${cityName}` : routeName;
 };
 
 const getShopLabel = (shop?: { shopName?: string; shopNameGujarati?: string }) =>
-  [shop?.shopName, shop?.shopNameGujarati].filter(Boolean).join(" / ") || "Shop";
+  shop?.shopName || "Shop";
 
 const getProductLabel = (product?: { productName?: string; productNameGujarati?: string }) =>
-  [product?.productName, product?.productNameGujarati].filter(Boolean).join(" / ") || "-";
+  product?.productName || "-";
 
 const getBillAmount = (record: BillItem) =>
   record.amount ?? record.billAmount ?? record.totalAmount ?? record.grandTotal ?? record.netAmount ?? 0;

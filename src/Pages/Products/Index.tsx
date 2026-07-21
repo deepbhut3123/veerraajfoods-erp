@@ -222,12 +222,7 @@ const ProductsPage: React.FC = () => {
       dataIndex: "productName",
       key: "productName",
       width: 320,
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{record.productName}</Text>
-          {record.productNameGujarati ? <Text type="secondary">{record.productNameGujarati}</Text> : null}
-        </Space>
-      ),
+      render: (_, record) => <Text strong>{record.productName}</Text>,
     },
     {
       title: "Product Rate",

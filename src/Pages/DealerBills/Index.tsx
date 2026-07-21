@@ -275,7 +275,7 @@ const normalizeProductName = (value?: string) =>
     .toLowerCase();
 
 const getProductLabel = (product?: { productName?: string; productNameGujarati?: string }) =>
-  [product?.productName, product?.productNameGujarati].filter(Boolean).join(" / ") || "-";
+  product?.productName || "-";
 
 const resolveStockProduct = (
   productName: string | undefined,

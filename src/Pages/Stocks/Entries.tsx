@@ -95,7 +95,7 @@ const getProductIdValue = (productId?: StockEntryItem["productId"]) =>
   typeof productId === "object" ? productId?._id || productId?.id || "" : productId || "";
 
 const getProductLabel = (product?: { productName?: string; productNameGujarati?: string }) =>
-  [product?.productName, product?.productNameGujarati].filter(Boolean).join(" / ") || "-";
+  product?.productName || "-";
 
 const StocksEntriesPage: React.FC = () => {
   const [data, setData] = useState<StockEntryRow[]>([]);

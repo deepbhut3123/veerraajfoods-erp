@@ -88,7 +88,7 @@ const getProductIdValue = (productId?: StockEntryItem["productId"]) =>
 const getProductKey = (product?: ProductOption) => product?._id || product?.id || "";
 
 const getProductLabel = (product?: { productName?: string; productNameGujarati?: string }) =>
-  [product?.productName, product?.productNameGujarati].filter(Boolean).join(" / ") || "-";
+  product?.productName || "-";
 
 const StocksDashboardPage: React.FC = () => {
   const [products, setProducts] = useState<ProductOption[]>([]);

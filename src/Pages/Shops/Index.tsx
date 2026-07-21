@@ -92,8 +92,8 @@ type ShopFormValues = {
 const getRouteLabel = (
   route: Pick<AdminRoute, "routeName" | "routeNameGujarati" | "cityName" | "cityNameGujarati">,
 ) => {
-  const routeName = [route.routeName, route.routeNameGujarati].filter(Boolean).join(" / ");
-  const cityName = [route.cityName, route.cityNameGujarati].filter(Boolean).join(" / ");
+  const routeName = route.routeName;
+  const cityName = route.cityName;
   return cityName ? `${routeName} - ${cityName}` : routeName;
 };
 
@@ -360,12 +360,7 @@ const ShopsPage: React.FC = () => {
       title: "Shop Name",
       dataIndex: "shopName",
       key: "shopName",
-      render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{record.shopName}</Text>
-          {record.shopNameGujarati ? <Text type="secondary">{record.shopNameGujarati}</Text> : null}
-        </Space>
-      ),
+      render: (_, record) => <Text strong>{record.shopName}</Text>,
     },
     {
       title: "Mobile Number",
@@ -378,7 +373,7 @@ const ShopsPage: React.FC = () => {
       render: (_, record) =>
         record.routeId?.routeName ? (
           <Tag color="green">
-            {[record.routeId.routeName, record.routeId.routeNameGujarati].filter(Boolean).join(" / ")}
+            {record.routeId.routeName}
             {record.routeId.cityName ? ` - ${record.routeId.cityName}` : ""}
           </Tag>
         ) : (
