@@ -632,20 +632,37 @@ const DealerStatementPage: React.FC = () => {
       const firstColumn = summaryWidths.date;
       const secondColumn = summaryWidths.bill;
       const thirdColumn = tableWidth - firstColumn - secondColumn;
+      const bottomLimit = pageHeight - 26;
 
-      drawCell(startX, cursorY, firstColumn, rowHeight + 4, "DATE", { fontSize: 9 });
-      drawCell(startX + firstColumn, cursorY, secondColumn, rowHeight + 4, "BILL AMOUNT", { fontSize: 9 });
-      drawCell(startX + firstColumn + secondColumn, cursorY, thirdColumn, rowHeight + 4, "RECEIVED AMOUNT", { fontSize: 9 });
+      const drawSummaryHeader = () => {
+        drawCell(startX, cursorY, firstColumn, rowHeight + 4, "DATE", { fontSize: 9 });
+        drawCell(startX + firstColumn, cursorY, secondColumn, rowHeight + 4, "BILL AMOUNT", { fontSize: 9 });
+        drawCell(startX + firstColumn + secondColumn, cursorY, thirdColumn, rowHeight + 4, "RECEIVED AMOUNT", { fontSize: 9 });
 
-      cursorY += rowHeight + 8;
+        cursorY += rowHeight + 8;
+      };
+
+      const ensureSummarySpace = (heightNeeded: number) => {
+        if (cursorY + heightNeeded <= bottomLimit) {
+          return;
+        }
+
+        doc.addPage();
+        cursorY = marginTop + 8;
+        drawSummaryHeader();
+      };
+
+      drawSummaryHeader();
 
       bodyRows.forEach((row) => {
+        ensureSummarySpace(rowHeight);
         drawCell(startX, cursorY, firstColumn, rowHeight, String(row[0] || "-"), { align: "left", fontSize: 8.6 });
         drawCell(startX + firstColumn, cursorY, secondColumn, rowHeight, String(row[2] || "-"), { fontSize: 8.6 });
         drawCell(startX + firstColumn + secondColumn, cursorY, thirdColumn, rowHeight, String(row[3] || "-"), { fontSize: 8.6 });
         cursorY += rowHeight;
       });
 
+      ensureSummarySpace(rowHeight + 8 + rowHeight + 32 + rowHeight + 2);
       drawCell(startX, cursorY + 8, firstColumn, rowHeight, "", { fontSize: 8.6 });
       drawCell(startX + firstColumn, cursorY + 8, secondColumn, rowHeight, formatPdfAmount(totalBillAmount), { fontSize: 8.6 });
       drawCell(startX + firstColumn + secondColumn, cursorY + 8, thirdColumn, rowHeight, formatPdfAmount(totalPaymentAmount), { fontSize: 8.6 });
