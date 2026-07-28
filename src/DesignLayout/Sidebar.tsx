@@ -5,7 +5,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   AuditOutlined,
   AppstoreOutlined,
-  BarChartOutlined,
   BankOutlined,
   BorderOutlined,
   ClockCircleOutlined,
