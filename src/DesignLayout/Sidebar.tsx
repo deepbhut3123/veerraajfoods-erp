@@ -135,12 +135,12 @@ const MENU_ITEMS: SidebarMenuItem[] = [
         text: "Bills",
         link: "/dealer-bills",
       },
-      {
-        key: "orders",
-        icon: <FileTextOutlined style={{ color: "inherit" }} />,
-        text: "Orders",
-        link: "/orders",
-      },
+      // {
+      //   key: "orders",
+      //   icon: <FileTextOutlined style={{ color: "inherit" }} />,
+      //   text: "Orders",
+      //   link: "/orders",
+      // },
       {
         key: "dealer-payments",
         icon: <CreditCardOutlined style={{ color: "inherit" }} />,
@@ -155,25 +155,25 @@ const MENU_ITEMS: SidebarMenuItem[] = [
       },
     ],
   },
-  {
-    key: "stocks-group",
-    icon: <InboxOutlined style={{ color: "inherit" }} />,
-    text: "Stocks",
-    children: [
-      {
-        key: "stocks-dashboard",
-        icon: <BarChartOutlined style={{ color: "inherit" }} />,
-        text: "Stock Dashboard",
-        link: "/stocks-dashboard",
-      },
-      {
-        key: "stocks-entry",
-        icon: <DatabaseOutlined style={{ color: "inherit" }} />,
-        text: "Stocks Entry",
-        link: "/stocks-entry",
-      },
-    ],
-  },
+  // {
+  //   key: "stocks-group",
+  //   icon: <InboxOutlined style={{ color: "inherit" }} />,
+  //   text: "Stocks",
+  //   children: [
+  //     {
+  //       key: "stocks-dashboard",
+  //       icon: <BarChartOutlined style={{ color: "inherit" }} />,
+  //       text: "Stock Dashboard",
+  //       link: "/stocks-dashboard",
+  //     },
+  //     {
+  //       key: "stocks-entry",
+  //       icon: <DatabaseOutlined style={{ color: "inherit" }} />,
+  //       text: "Stocks Entry",
+  //       link: "/stocks-entry",
+  //     },
+  //   ],
+  // },
   {
     key: "expense-group",
     icon: <DollarCircleOutlined style={{ color: "inherit" }} />,

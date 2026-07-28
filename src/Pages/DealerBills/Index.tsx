@@ -233,7 +233,10 @@ const sortDealerProductsBySequence = (items: DealerProductOption[]) =>
 const getDealerBillSequence = (
   records: DealerBillRecord[],
   record: DealerBillRecord,
-) => records.findIndex((item) => item._id === record._id) + 1;
+) => {
+  const index = records.findIndex((item) => item._id === record._id);
+  return index >= 0 ? records.length - index : 0;
+};
 
 const calculateAmountFromMargin = (rate?: number, margin?: number) => {
   const normalizedRate = Number(rate || 0);
@@ -877,7 +880,7 @@ const DealerBillsPage: React.FC = () => {
       key: "serialNumber",
       width: 90,
       align: "center",
-      render: (_, __, index) => index + 1,
+      render: (_, __, index) => data.length - index,
     },
     {
       title: "Bill Date",
