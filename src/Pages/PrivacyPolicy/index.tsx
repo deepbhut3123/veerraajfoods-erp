@@ -1,7 +1,28 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "./PrivacyPolicy.css";
 
 const PrivacyPolicy: React.FC = () => {
+  useEffect(() => {
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const root = document.getElementById("root");
+    const previousRootOverflow = root?.style.overflow;
+
+    document.documentElement.style.overflow = "auto";
+    document.body.style.overflow = "auto";
+    if (root) {
+      root.style.overflow = "auto";
+    }
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      if (root && previousRootOverflow !== undefined) {
+        root.style.overflow = previousRootOverflow;
+      }
+    };
+  }, []);
+
   return (
     <main className="privacy-page">
       <section className="privacy-shell">

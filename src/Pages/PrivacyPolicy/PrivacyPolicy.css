@@ -1,8 +1,13 @@
 .privacy-page {
   min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #f6f8fb;
   color: #1f2937;
   padding: 48px 18px;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
 }
 
 .privacy-shell {
