@@ -8,6 +8,7 @@ import Login from './Auth/Login';
 import { AuthContext, AuthProvider } from './Auth/AuthContext';
 import Register from './Auth/Register';
 import PrivateRoute from './Auth/privateRoute';
+import PrivacyPolicy from './Pages/PrivacyPolicy';
 import "antd/dist/reset.css"; // for AntD v5+
 // import Notifications from './Pages/Notification';
 // import { SettingsProvider } from './Pages/Settings/SettingContext';
@@ -27,6 +28,7 @@ const AppRoutes: React.FC = () => {
           path="/register"
           element={isAuthenticated ? <Navigate replace to="/dashboard" /> : <Register />}
         />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route element={<PrivateRoute />}>
           {AdminRoutes.map((route) => (
             <Route
