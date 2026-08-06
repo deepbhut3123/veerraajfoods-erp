@@ -1,0 +1,36 @@
+.account-deletion-page {
+  padding: 20px;
+}
+
+.account-deletion-card {
+  border-radius: 14px;
+}
+
+.account-deletion-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.account-deletion-toolbar {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) 180px auto;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 720px) {
+  .account-deletion-page {
+    padding: 12px;
+  }
+
+  .account-deletion-header {
+    flex-direction: column;
+  }
+
+  .account-deletion-toolbar {
+    grid-template-columns: 1fr;
+  }
+}

@@ -20,6 +20,7 @@ import {
   SolutionOutlined,
   TeamOutlined,
   TransactionOutlined,
+  UserDeleteOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import "../MasterLayout/Master.css";
@@ -204,6 +205,12 @@ const MENU_ITEMS: SidebarMenuItem[] = [
     text: "Users",
     link: "/users",
   },
+  {
+    key: "account-deletion-requests",
+    icon: <UserDeleteOutlined style={{ color: "inherit" }} />,
+    text: "Account Deletion",
+    link: "/account-deletion-requests",
+  },
 ];
 
 const isMenuGroup = (item: SidebarMenuItem): item is MenuGroupItem =>
@@ -316,6 +323,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       "/expense-purchases": "Purchase",
       "/expense-entries": "Expense Entry",
       "/users": "Users",
+      "/account-deletion-requests": "Account Deletion Requests",
     };
 
     let title = "VEERRAAJ FOODS";
@@ -560,3 +568,5 @@ const Sidebar: React.FC<SidebarProps> = ({
 };
 
 export default Sidebar;
+
+

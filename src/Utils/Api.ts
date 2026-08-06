@@ -1155,3 +1155,27 @@ export const completeOnlineOrderPayment = async (
     throw error;
   }
 };
+
+export const getAccountDeletionRequests = async (params?: {
+  status?: string;
+  search?: string;
+}) => {
+  try {
+    const response = await API.get("/admin/account-deletion-requests", { params });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateAccountDeletionRequest = async (
+  id: string,
+  data: { status: string; adminNote?: string },
+) => {
+  try {
+    const response = await API.patch(`/admin/account-deletion-requests/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};

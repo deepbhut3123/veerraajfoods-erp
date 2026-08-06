@@ -19,6 +19,7 @@ import RoutesPage from "./Pages/Routes/Index";
 import ShopsPage from "./Pages/Shops/Index";
 import ProductsPage from "./Pages/Products/Index";
 import UsersPage from "./Pages/Users/Index";
+import AccountDeletionRequestsPage from "./Pages/AccountDeletionRequests/Index";
 
 const AdminRoutes = [
   {
@@ -126,6 +127,12 @@ const AdminRoutes = [
     name: "Users",
     component: UsersPage,
   },
+  {
+    path: "/account-deletion-requests",
+    name: "Account Deletion Requests",
+    component: AccountDeletionRequestsPage,
+  },
   ];
 
 export { AdminRoutes };
+

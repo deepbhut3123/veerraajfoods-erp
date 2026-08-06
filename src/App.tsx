@@ -9,6 +9,7 @@ import { AuthContext, AuthProvider } from './Auth/AuthContext';
 import Register from './Auth/Register';
 import PrivateRoute from './Auth/privateRoute';
 import PrivacyPolicy from './Pages/PrivacyPolicy';
+import DeleteAccount from './Pages/DeleteAccount';
 import "antd/dist/reset.css"; // for AntD v5+
 // import Notifications from './Pages/Notification';
 // import { SettingsProvider } from './Pages/Settings/SettingContext';
@@ -29,6 +30,7 @@ const AppRoutes: React.FC = () => {
           element={isAuthenticated ? <Navigate replace to="/dashboard" /> : <Register />}
         />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/delete-account" element={<DeleteAccount />} />
         <Route element={<PrivateRoute />}>
           {AdminRoutes.map((route) => (
             <Route
@@ -59,3 +61,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+
