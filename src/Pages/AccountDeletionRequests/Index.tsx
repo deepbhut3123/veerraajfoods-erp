@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, Input, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
@@ -94,7 +94,7 @@ const AccountDeletionRequestsPage: React.FC = () => {
     [data],
   );
 
-  const loadRequests = async () => {
+  const loadRequests = useCallback(async () => {
     setLoading(true);
     try {
       const res = await getAccountDeletionRequests({ status, search: search.trim() });
@@ -104,11 +104,11 @@ const AccountDeletionRequestsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, status]);
 
   useEffect(() => {
     loadRequests();
-  }, [status]);
+  }, [loadRequests]);
 
   const updateStatus = async (id: string, nextStatus: string) => {
     setUpdatingId(id);
@@ -232,3 +232,6 @@ const AccountDeletionRequestsPage: React.FC = () => {
 };
 
 export default AccountDeletionRequestsPage;
+
+
+
