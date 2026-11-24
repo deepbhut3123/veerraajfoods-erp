@@ -35,6 +35,7 @@ import {
   updateAdminBill,
 } from "../../Utils/Api";
 import { getRoleMeta } from "../../Utils/roles";
+import { sortShopsByRouteSequence } from "../../Utils/routeShopSequence";
 import "./Index.css";
 
 const { Title, Text } = Typography;
@@ -123,6 +124,7 @@ type AdminRoute = {
 
 type AdminShop = {
   _id: string;
+  sequence?: number;
   shopName?: string;
   shopNameGujarati?: string;
   shopAddress?: string;
@@ -410,11 +412,11 @@ const BillsPage: React.FC = () => {
 
   const filteredShops = useMemo(
     () =>
-      shops.filter((shop) =>
-        selectedRouteId
-          ? shop.routeId?._id === selectedRouteId
-          : true,
-      ),
+      selectedRouteId
+        ? sortShopsByRouteSequence(
+            shops.filter((shop) => shop.routeId?._id === selectedRouteId),
+          )
+        : shops,
     [selectedRouteId, shops],
   );
 

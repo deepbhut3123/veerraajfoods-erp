@@ -37,9 +37,12 @@ import {
   deleteAdminShop,
   getAllAdminRoutes,
   getAllAdminShops,
+  moveAdminShopToRoute,
   updateAdminShop,
 } from "../../Utils/Api";
+import { sortShopsWithinRoutes } from "../../Utils/routeShopSequence";
 import "leaflet/dist/leaflet.css";
+import "./Index.css";
 
 const { Title, Text } = Typography;
 const THEME = {
@@ -49,6 +52,7 @@ const THEME = {
 
 type AdminShop = {
   _id: string;
+  sequence?: number;
   shopName: string;
   shopNameGujarati?: string;
   shopAddress: string;
@@ -186,6 +190,7 @@ const ShopsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [mapModalOpen, setMapModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [movingShopId, setMovingShopId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<AdminShop | null>(null);
   const [selectedMapPosition, setSelectedMapPosition] = useState<[number, number]>(DEFAULT_MAP_CENTER);
   const [form] = Form.useForm<ShopFormValues>();
@@ -199,7 +204,7 @@ const ShopsPage: React.FC = () => {
         getAllAdminShops({ search: search.trim() || undefined }),
         getAllAdminRoutes(),
       ]);
-      setData(shopsRes?.data || []);
+      setData(sortShopsWithinRoutes(shopsRes?.data || []));
       setRoutes(routesRes?.data || []);
     } catch (err: any) {
       setError(
@@ -349,6 +354,21 @@ const ShopsPage: React.FC = () => {
     }
   };
 
+  const handleMoveShop = async (shop: AdminShop, routeId: string) => {
+    if (shop.routeId?._id === routeId || movingShopId) return;
+
+    setMovingShopId(shop._id);
+    try {
+      await moveAdminShopToRoute(shop._id, routeId);
+      message.success(`${shop.shopName} moved to another route`);
+      await loadShops(searchText);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err?.message || "Failed to move shop");
+    } finally {
+      setMovingShopId(null);
+    }
+  };
+
   const columns: ColumnsType<AdminShop> = [
     {
       title: "#",
@@ -370,15 +390,24 @@ const ShopsPage: React.FC = () => {
     {
       title: "Route Name",
       key: "routeId",
-      render: (_, record) =>
-        record.routeId?.routeName ? (
-          <Tag color="green">
-            {record.routeId.routeName}
-            {record.routeId.cityName ? ` - ${record.routeId.cityName}` : ""}
-          </Tag>
-        ) : (
-          <Tag>Unassigned</Tag>
-        ),
+      render: (_, record) => (
+        <Select
+          className="shop-route-select"
+          aria-label={`Change route for ${record.shopName}`}
+          value={record.routeId?._id}
+          placeholder="Select route"
+          showSearch
+          optionFilterProp="label"
+          options={routes.map((route) => ({
+            value: route._id,
+            label: getRouteLabel(route),
+          }))}
+          loading={movingShopId === record._id}
+          disabled={Boolean(movingShopId)}
+          onChange={(routeId) => void handleMoveShop(record, routeId)}
+          style={{ width: 300 }}
+        />
+      ),
     },
     {
       title: "Created By",

@@ -176,6 +176,11 @@ export const updateAdminShop = async (
   }
 };
 
+export const moveAdminShopToRoute = async (shopId: string, routeId: string) => {
+  const response = await API.patch(`/admin/retailer/shops/${shopId}/route`, { routeId });
+  return response.data;
+};
+
 export const deleteAdminShop = async (id: string) => {
   try {
     const response = await API.delete(`/admin/retailer/shops/${id}`);
@@ -183,6 +188,11 @@ export const deleteAdminShop = async (id: string) => {
   } catch (error) {
     throw error;
   }
+};
+
+export const reorderRouteShops = async (routeId: string, shopIds: string[]) => {
+  const response = await API.patch(`/admin/retailer/routes/${routeId}/shops/reorder`, { shopIds });
+  return response.data;
 };
 
 export const getAllAdminBills = async (params?: {

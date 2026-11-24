@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -19,6 +19,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   EnvironmentOutlined,
+  HolderOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
 import {
@@ -26,8 +27,10 @@ import {
   deleteAdminRoute,
   getAllAdminRoutes,
   getAllAdminShops,
+  reorderRouteShops,
   updateAdminRoute,
 } from "../../Utils/Api";
+import { sortShopsByRouteSequence } from "../../Utils/routeShopSequence";
 
 const { Title, Text } = Typography;
 const THEME = {
@@ -51,6 +54,7 @@ type AdminRoute = {
 
 type AdminShop = {
   _id: string;
+  sequence?: number;
   shopName: string;
   shopNameGujarati?: string;
   shopAddress?: string;
@@ -182,10 +186,59 @@ const RoutesPage: React.FC = () => {
   const [error, setError] = useState("");
   const [searchText, setSearchText] = useState("");
   const [activeRoute, setActiveRoute] = useState<AdminRoute | null>(null);
+  const [draggingShopId, setDraggingShopId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState<AdminRoute | null>(null);
   const [form] = Form.useForm<RouteFormValues>();
+  const shopListRef = useRef<HTMLDivElement | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const scrollSpeedRef = useRef(0);
+  const lastDragOverRef = useRef(0);
+
+  const stopDragScroll = () => {
+    scrollSpeedRef.current = 0;
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+      scrollFrameRef.current = null;
+    }
+  };
+
+  const updateDragScroll = (clientY: number) => {
+    const list = shopListRef.current;
+    if (!list) return;
+
+    const bounds = list.getBoundingClientRect();
+    const edgeSize = Math.min(80, bounds.height / 4);
+    const distanceFromTop = clientY - bounds.top;
+    const distanceFromBottom = bounds.bottom - clientY;
+    const maxSpeed = 18;
+
+    scrollSpeedRef.current = distanceFromTop < edgeSize
+      ? -maxSpeed * (1 - Math.max(0, distanceFromTop) / edgeSize)
+      : distanceFromBottom < edgeSize
+        ? maxSpeed * (1 - Math.max(0, distanceFromBottom) / edgeSize)
+        : 0;
+    lastDragOverRef.current = Date.now();
+
+    if (scrollSpeedRef.current && scrollFrameRef.current === null) {
+      const scroll = () => {
+        if (!shopListRef.current || !scrollSpeedRef.current || Date.now() - lastDragOverRef.current > 800) {
+          stopDragScroll();
+          return;
+        }
+        shopListRef.current.scrollTop += scrollSpeedRef.current;
+        scrollFrameRef.current = window.requestAnimationFrame(scroll);
+      };
+      scrollFrameRef.current = window.requestAnimationFrame(scroll);
+    }
+  };
+
+  useEffect(() => () => {
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+  }, []);
 
   const loadRoutes = async (search = "") => {
     setLoading(true);
@@ -287,7 +340,7 @@ const RoutesPage: React.FC = () => {
       return [];
     }
 
-    return shops.filter((shop) => {
+    const assignedShops = shops.filter((shop) => {
       if (shop.routeId?._id && activeRoute._id) {
         return shop.routeId._id === activeRoute._id;
       }
@@ -297,7 +350,36 @@ const RoutesPage: React.FC = () => {
         shop.routeId?.cityName === activeRoute.cityName
       );
     });
+    return sortShopsByRouteSequence(assignedShops);
   }, [activeRoute, shops]);
+
+  const handleReorder = async (draggedId: string, targetId: string) => {
+    if (!activeRoute || reordering || !draggedId || draggedId === targetId) return;
+
+    const draggedIndex = routeShops.findIndex((shop) => shop._id === draggedId);
+    const targetIndex = routeShops.findIndex((shop) => shop._id === targetId);
+    if (draggedIndex < 0 || targetIndex < 0) return;
+
+    const reordered = [...routeShops];
+    const [draggedShop] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, draggedShop);
+    const previousShops = shops;
+    const sequenceById = new Map(reordered.map((shop, index) => [shop._id, index + 1]));
+    setShops((current) => current.map((shop) =>
+      sequenceById.has(shop._id) ? { ...shop, sequence: sequenceById.get(shop._id) } : shop,
+    ));
+    setReordering(true);
+    try {
+      await reorderRouteShops(activeRoute._id, reordered.map((shop) => shop._id));
+      message.success("Shop sequence saved");
+      await loadRoutes(searchText);
+    } catch (err: any) {
+      setShops(previousShops);
+      message.error(err?.response?.data?.message || err?.message || "Failed to save shop sequence");
+    } finally {
+      setReordering(false);
+    }
+  };
 
   const routeShopLocations = useMemo(
     () =>
@@ -578,7 +660,12 @@ const RoutesPage: React.FC = () => {
 
       <Modal
         open={Boolean(activeRoute)}
-        onCancel={() => setActiveRoute(null)}
+        onCancel={() => {
+          stopDragScroll();
+          setDraggingShopId(null);
+          setDropTargetId(null);
+          setActiveRoute(null);
+        }}
         footer={null}
         width={920}
         title={
@@ -599,7 +686,7 @@ const RoutesPage: React.FC = () => {
           >
             <Text type="secondary">
               {routeShops.length
-                ? `Showing ${routeShops.length} shop location${routeShops.length > 1 ? "s" : ""} for this route.`
+                ? `Showing ${routeShops.length} shop${routeShops.length > 1 ? "s" : ""} in route sequence. Drag a shop to change its position; hold near the list edge to scroll.`
                 : "No shops found for this route."}
             </Text>
 
@@ -618,18 +705,83 @@ const RoutesPage: React.FC = () => {
             </Button>
           </div>
 
-          {routeShops.map((shop) => {
+          <div
+            ref={shopListRef}
+            onDragOver={(event) => {
+              event.preventDefault();
+              updateDragScroll(event.clientY);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              stopDragScroll();
+              setDraggingShopId(null);
+              setDropTargetId(null);
+              const draggedId = event.dataTransfer.getData("text/plain");
+              if (draggedId && routeShops.length) {
+                const cards = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[data-shop-id]"));
+                const closest = cards.reduce<HTMLElement | null>((nearest, card) => {
+                  if (!nearest) return card;
+                  const distance = (element: HTMLElement) => {
+                    const bounds = element.getBoundingClientRect();
+                    return Math.abs(event.clientY - (bounds.top + bounds.bottom) / 2);
+                  };
+                  return distance(card) < distance(nearest) ? card : nearest;
+                }, null);
+                if (closest?.dataset.shopId) void handleReorder(draggedId, closest.dataset.shopId);
+              }
+            }}
+            style={{
+              maxHeight: "min(60vh, 560px)",
+              overflowY: "auto",
+              padding: "2px 8px 14px 2px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+            }}
+          >
+          {routeShops.map((shop, index) => {
             const coordinates = getShopCoordinates(shop);
 
             return (
               <Card
                 key={shop._id}
+                data-shop-id={shop._id}
                 size="small"
                 bordered={false}
+                draggable={!reordering}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", shop._id);
+                  setDraggingShopId(shop._id);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDropTargetId(shop._id);
+                }}
+                onDragLeave={() => setDropTargetId((current) => current === shop._id ? null : current)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  stopDragScroll();
+                  const draggedId = event.dataTransfer.getData("text/plain");
+                  setDraggingShopId(null);
+                  setDropTargetId(null);
+                  void handleReorder(draggedId, shop._id);
+                }}
+                onDragEnd={() => {
+                  stopDragScroll();
+                  setDraggingShopId(null);
+                  setDropTargetId(null);
+                }}
                 style={{
                   background: "#f7fffd",
-                  border: "1px solid rgba(0, 105, 92, 0.1)",
+                  border: dropTargetId === shop._id && draggingShopId !== shop._id
+                    ? "2px solid #00695C"
+                    : "1px solid rgba(0, 105, 92, 0.1)",
                   borderRadius: 14,
+                  cursor: reordering ? "wait" : "grab",
+                  opacity: draggingShopId === shop._id ? 0.5 : 1,
                 }}
               >
                 <div
@@ -642,7 +794,7 @@ const RoutesPage: React.FC = () => {
                   }}
                 >
                   <Space direction="vertical" size={4}>
-                    <Text strong>{shop.shopName}</Text>
+                    <Text strong><HolderOutlined style={{ marginRight: 8 }} />{index + 1}. {shop.shopName}</Text>
                     <Text>{shop.shopAddress || "-"}</Text>
                     <Text type="secondary">Mobile: {shop.mobileNumber || "-"}</Text>
                     <Text type="secondary">
@@ -668,6 +820,7 @@ const RoutesPage: React.FC = () => {
               </Card>
             );
           })}
+          </div>
         </Space>
       </Modal>
 

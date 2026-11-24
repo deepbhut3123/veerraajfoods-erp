@@ -1,0 +1,15 @@
+.shop-route-select .ant-select-selector {
+  background: #f6ffed !important;
+  border-color: #b7eb8f !important;
+  border-radius: 6px;
+}
+
+.shop-route-select .ant-select-selection-item,
+.shop-route-select .ant-select-arrow {
+  color: #389e0d !important;
+}
+
+.shop-route-select.ant-select-focused .ant-select-selector {
+  border-color: #52c41a !important;
+  box-shadow: 0 0 0 2px rgba(82, 196, 26, 0.15) !important;
+}
